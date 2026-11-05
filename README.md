@@ -156,7 +156,8 @@ filesystem, so nothing is copied to the nodes. The folder `condor/` holds the sc
 A **plan** (`rfl/experiments/plans/*.py`) lists the runs of a study. `rfl/experiments/grid.py`
 turns a plan into jobs, checks them, runs or monitors them, and selects
 hyperparameters. The plans provided: `smoke` (the main options on synthetic data,
-minutes), `smoke_auto` (the automatic pipeline on synthetic data, minutes), `mi_protocol` (a motor-imagery study with the recommended protocol),
+minutes), `smoke_real` (five short runs on a downloaded dataset, to check the worker
+nodes), `smoke_auto` (the automatic pipeline on synthetic data, minutes), `mi_protocol` (a motor-imagery study with the recommended protocol),
 `mi_spdnet_bn_calib` then `mi_spdnet_bn` (the SPD batch norm in SPDNet: none, FedBN or shared, with a shared or
 personal head, on subject and IID clients), `synth_bn_calib` then `synth_bn` (the same
 study on a small synthetic federation, about 2 h on 2 cores), `mi_datasize` with
@@ -211,6 +212,20 @@ condor_q                                     # your jobs: idle, running, held
 python -m rfl.experiments.grid smoke --status    # done / failed / pending
 python -m rfl.analysis.report $RFL_RESULTS/smoke --by arch aggregation scope participation eps
 ```
+
+Then, once a dataset is downloaded, the same check on real EEG: five short runs
+(SPDNet, EEGNet, TS+LR) that read the data on the worker nodes.
+
+```bash
+export RFL_DATASET=BNCI2014_001
+bash condor/submit.sh smoke_real --short
+python -m rfl.experiments.grid smoke_real --status
+```
+
+The worker nodes have no network. Recent MOABB versions (1.7) fetch some datasets
+from NEMAR and may query its server at every load. If `smoke_real` fails on the nodes
+with a network error while it runs on the user interface, install the MOABB version of
+the paper runs, `pip install "moabb==1.5.0"`, download again, and resubmit.
 
 Every job should end as `done`. The accuracies of the smoke plan mean nothing (one
 seed, no tuning). It only checks that the main options run on the worker nodes. It has
@@ -990,7 +1005,7 @@ Under DP the batch size must not exceed the smallest client training set.
    `--hidden-dim-block1`). Add the BiMap dimension and the floor to `DATASET_DEFAULTS`.
    Without them the runners use generic values (n_channels // 2, 1e-4) and warn.
 4. **Batch sizes.** The download script also counts the trials of each subject
-   (`<MNE_DATA>/rfl-stats/<Name>.json`, `rfl/data/stats.py`, skip with `--no-stats`). With
+   (`<MNE_DATA>/rfl-stats/<Name>.json`, `rfl/data/stats.py`), as it loads each subject. With
    this file, `--check` refuses a DP batch size above the smallest client training
    set, before any run starts. Each run also prints `[Client i] subjects [...]:
    train=...` at its start.
@@ -1058,7 +1073,7 @@ columns (`--by ... lr batch_size horizon`) or filter with `--where` in that case
 | `rfl/training/` | Centralised training loop, evaluation, checkpoints, optimiser choice |
 | `rfl/synthetic_pca/` | Federated PCA on the Grassmann manifold |
 | `rfl/experiments/` | Entry points: the two runners and the TS+LR baseline (`run_tslr.py`), `datasize.py` (data-quantity plans), `cli_checks.py` (option checks), `grid.py` (plans), `protocol.py` (the recommended protocol), `pipeline.py` (a whole study, automatically), dataset download, covariance analysis, accountant comparison, synthetic PCA |
-| `rfl/experiments/plans/` | Experiment plans: `smoke`, `smoke_auto`, `mi_protocol`, `mi_spdnet_bn_calib` and `mi_spdnet_bn`, `synth_bn_calib` and `synth_bn`, `mi_datasize` (with `_eegnet`, `_tslr`), `synth_datasize` (with `_tslr`), `mi_study`, `template_new_dataset` |
+| `rfl/experiments/plans/` | Experiment plans: `smoke`, `smoke_real`, `smoke_auto`, `mi_protocol`, `mi_spdnet_bn_calib` and `mi_spdnet_bn`, `synth_bn_calib` and `synth_bn`, `mi_datasize` (with `_eegnet`, `_tslr`), `synth_datasize` (with `_tslr`), `mi_study`, `template_new_dataset` |
 | `rfl/utils/` | Base configuration, learning-rate schedules, seeding and environment record, logging setup |
 | `rfl/analysis/` | Result tables, curves, paired tests |
 | `condor/` | HTCondor scripts for MUST (see [Running on MUST](#running-on-must-htcondor)) |
