@@ -13,7 +13,7 @@ norm uses the GAH mean. DP refuses the layer, so the study is non-private. Every
 trains with plain SGD and the library's orthogonal parametrization of the BiMap weights,
 and the federated arms aggregate with ProjAvg.
 
-One protocol for every arm (README, SPD batch norm, Study):
+One protocol for every arm (docs/options.md, SPD batch norm, Study):
 
     floors        analyze_covariances --architectures (mi_spdnet_bn_calib)
     calibration   mi_spdnet_bn_calib: architecture, ReEig percentile and momentum of the

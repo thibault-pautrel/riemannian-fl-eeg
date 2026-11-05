@@ -1,7 +1,7 @@
 """Template: a study on a new dataset, with its own search space.
 
 Copy this file to rfl/experiments/plans/<my_study>.py and edit the values below. Before a
-new dataset, follow README, "Adding a dataset" (registry entry, download, ReEig floors).
+new dataset, follow docs/data.md, "Adding a dataset" (registry entry, download, ReEig floors).
 
 This template uses the staged search: stage 1 tunes the learning rate and the horizon,
 stage 2 the clip constant C (DP arms) and the BiMap dimension, at the values chosen in
@@ -32,7 +32,7 @@ P = Protocol(
         "nodp": {"lr": [1e-3, 1e-2], "batch_size": [32], "horizon": [100, 200]},
         # Private arms: the batch size sets the sensitivity 2C/B. It must not exceed
         # the smallest client training set (checked by --check once the dataset
-        # statistics exist, see README).
+        # statistics exist, see docs/data.md).
         "dp": {"lr": [1e-2, 1e-1], "batch_size": [64], "horizon": [100, 200],
                "--dp-clip-C": [1.0, 0.5, 2.0]},
     },

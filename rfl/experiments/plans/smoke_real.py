@@ -10,7 +10,7 @@ TS+LR baseline. Two rounds or epochs each: minutes. The accuracies mean nothing.
     python -m rfl.experiments.grid smoke_real --status
 
 A job that fails on a worker but runs on the user interface points to data read over
-the network: see README, Data.
+the network: see docs/data.md.
 """
 
 import os

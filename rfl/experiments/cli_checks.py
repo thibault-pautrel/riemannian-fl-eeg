@@ -104,7 +104,7 @@ def dataset_errors(args, src: str):
         warns.append("--bn-position before_reeig: every ReEig block then reads batch-"
                      "normalised matrices (spectrum near the identity). The registry floors "
                      "were set for trace-normalised covariances. Recalibrate "
-                     "--epsilon/--epsilons (README, SPD batch norm).")
+                     "--epsilon/--epsilons (docs/options.md, SPD batch norm).")
     if src == "synthetic":
         return errors, warns
     from rfl.data.registry import get_events
