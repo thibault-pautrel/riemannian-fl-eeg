@@ -1,0 +1,24 @@
+# Install PyTorch first, for your platform and CUDA version (see README).
+# torch is left unpinned here so that this file never replaces a GPU build.
+torch
+# Intel Mac: torch 2.2.2 needs numpy<2 (pip install 'numpy<2' after this file).
+numpy
+scipy
+scikit-learn
+pandas
+tqdm
+moabb
+mne
+matplotlib
+# Tangent space + logistic regression baseline (rfl/experiments/run_tslr.py); also
+# installed by moabb.
+pyriemann
+
+# SPDNet layers, pinned to the commit the code was tested with (21 October 2026).
+# The paper repositories pin the earlier commit 5b25c30.
+yetanotherspdnet @ git+https://github.com/Yet-Another-Research-Organisation/yetanotherspdnet@5c08ebc482c7b9c2820ccfa71c5c6c57bf1c9102
+
+# Optional: Nemenyi post-hoc test in analysis/stats.py
+# scikit-posthocs
+
+# Exact versions of the experiment environments: environment/requirements.lock.*.txt

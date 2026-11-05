@@ -1,0 +1,63 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it and the paper that matches your use."
+title: "riemannian-fl-eeg: federated SPDNet and EEGNet with optional personalisation and differential privacy"
+authors:
+  - family-names: Pautrel
+    given-names: Thibault
+    affiliation: "Université Paris-Saclay, CNRS, CentraleSupélec, L2S"
+license: MIT
+repository-code: "https://github.com/thibault-pautrel/riemannian-fl-eeg"
+version: 1.0.0
+date-released: "2026-11-03"
+references:
+  - type: conference-paper
+    title: "How much representation learning does federated EEG decoding need? The case of SPDNet"
+    authors:
+      - family-names: Pautrel
+        given-names: Thibault
+      - family-names: Bouchard
+        given-names: Florent
+      - family-names: Mian
+        given-names: Ammar
+      - family-names: Ginolhac
+        given-names: Guillaume
+    collection-title: "ICASSP 2027 (submitted)"
+    identifiers:
+      - type: other
+        value: "arXiv:2609.29037"
+    year: 2026
+  - type: article
+    title: "Projection-Based Federated Learning on Compact Submanifolds with Geometry-Independent Differential Privacy"
+    authors:
+      - family-names: Pautrel
+        given-names: Thibault
+      - family-names: Bouchard
+        given-names: Florent
+      - family-names: Ginolhac
+        given-names: Guillaume
+      - family-names: Mian
+        given-names: Ammar
+      - family-names: Bellet
+        given-names: Aurélien
+    journal: "Transactions on Machine Learning Research (under review)"
+    identifiers:
+      - type: other
+        value: "arXiv:2610.33712"
+    url: "https://arxiv.org/abs/2610.33712"
+    year: 2026
+  - type: article
+    title: "On batch normalization for SPDnet"
+    authors:
+      - family-names: Gallet
+        given-names: Matthieu
+      - family-names: Mian
+        given-names: Ammar
+      - family-names: Bouchard
+        given-names: Florent
+      - family-names: Ginolhac
+        given-names: Guillaume
+    journal: "Signal Processing"
+    volume: 250
+    start: 110793
+    year: 2027
+    doi: "10.1016/j.sigpro.2026.110793"

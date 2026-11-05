@@ -1,0 +1,36 @@
+# HTCondor submit description: one job per line of a jobs file.
+#
+# Do not call condor_submit on this file directly. Use condor/submit.sh, which writes the
+# jobs file and fills in the macros below:
+#
+#   repo       the repository (condor/run_one.sh is executed from it)
+#   jobs_file  one job per line: "<save_dir> <fed|central> <runner arguments>"
+#   logdir     where the HTCondor .out/.err/.log files go
+#   cpus, memory, disk
+#   venv, results, mnedata, tmpdir   paths of condor/env.sh on the submit machine
+#   workdir    the folder submit.sh ran from: the jobs run there
+#
+# The repository, the virtual environment, the data and the results all live on the
+# shared filesystem, so nothing is transferred.
+
+universe              = vanilla
+initialdir            = $(workdir)
+executable            = $(repo)/condor/run_one.sh
+arguments             = $(job)
+transfer_executable   = false
+should_transfer_files = NO
+getenv                = False
+
+request_cpus          = $(cpus)
+request_memory        = $(memory)
+request_disk          = $(disk)
+# PyTorch uses one thread per requested core, not the whole node. The paths set on the
+# submit machine are passed on (getenv is False), so the worker uses the same
+# environment, data and results folders as the shell that ran submit.sh.
+environment           = "OMP_NUM_THREADS=$(cpus) MKL_NUM_THREADS=$(cpus) RFL_REPO=$(repo) RFL_VENV=$(venv) RFL_RESULTS=$(results) MNE_DATA=$(mnedata) RFL_TMPDIR=$(tmpdir) RFL_WORKDIR=$(workdir)"
+
+output                = $(logdir)/$(Cluster).$(Process).out
+error                 = $(logdir)/$(Cluster).$(Process).err
+log                   = $(logdir)/$(Cluster).log
+
+# Extra lines from condor/submit.sh (GPU, duration class, accounting group) go here.

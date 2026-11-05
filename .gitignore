@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.coverage
+build/
+dist/
+
+# Environments (condor/setup_must.sh creates .venv/)
+.venv/
+venv/
+.cache/
+
+# OS and editor files
+.DS_Store
+__MACOSX/
+._*
+.idea/
+.vscode/
+
+# Experiment outputs. condor/env.sh writes the runs, the DAGs and their HTCondor logs
+# to results/ by default, and its temporary files to results/.tmp/.
+results/
+figures/
+*.pt
+*.npz
+run.log
+exit_code
+
+# Logs of commands run in the repository folder (nohup bash condor/fetch_data.sh ...)
+*.log
+nohup.out
+
+# Tables and figures of the analysis commands run in the repository folder
+# (python -m rfl.analysis.datasize ... --out datasize_<dataset>)
+datasize_*.csv
+datasize_*.png
+
+# MNE / MOABB data (condor/env.sh puts it next to the repository, ../mne_data)
+mne_data/

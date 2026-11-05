@@ -1,0 +1,36 @@
+[project]
+name = "riemannian-fl-eeg"
+version = "1.0.0"
+description = "Federated learning of SPDNet and EEGNet on EEG, with optional personalisation and optional record-level differential privacy (DP-RFedProj)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Thibault Pautrel" }]
+
+# Dependencies: requirements.txt (pinned SPD library, torch installed first, see
+# README). `pip install -e .` then makes the packages importable from any folder.
+dynamic = ["dependencies"]
+
+[project.urls]
+Repository = "https://github.com/thibault-pautrel/riemannian-fl-eeg"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["rfl*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "slow: tests that take more than a few seconds",
+]
+filterwarnings = [
+    "ignore:Using padding='same' with even kernel lengths:UserWarning",
+]
