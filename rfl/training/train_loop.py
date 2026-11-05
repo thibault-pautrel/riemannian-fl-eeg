@@ -129,7 +129,7 @@ def train_epoch(
     correct = 0
     total = 0
 
-    pbar = tqdm(dataloader, desc=desc, leave=False)
+    pbar = tqdm(dataloader, desc=desc, leave=False, disable=None)   # off when not a terminal (job logs)
     for inputs, labels in pbar:
         inputs = inputs.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
@@ -358,8 +358,10 @@ def train_model(
                   f"Val Acc {val_acc:.4f}, F1 {val_f1:.4f}")
         else:
             patience_counter += 1
+            # patience 0: no early stopping, every epoch runs (the horizon is tuned)
+            limit = f"/{early_stopping_patience}" if early_stopping_patience else ""
             logger.info(f"No improvement on {selection_metric} for {patience_counter}"
-                  f"/{early_stopping_patience} epochs")
+                  f"{limit} epochs")
 
         # Save before the stopping test, so the last epoch is in the history and can
         # still be the best checkpoint.

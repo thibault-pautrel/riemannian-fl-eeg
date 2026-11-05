@@ -4,9 +4,10 @@
 #
 #   bash condor/submit_dag.sh <plan> [options]
 #
-# Options: --cpus N, --memory SIZE, --disk SIZE, --gpu [TYPE], --short | --long,
+# Options: --cpus N, --memory SIZE, --disk SIZE, --gpu [TYPE], --flash | --short | --long,
 # --group NAME (as condor/submit.sh), --retries N (passes per node, default 20),
-# --dry-run (write the DAG, do not submit).
+# --step N (only step N, by its number or node name in `pipeline status`; repeatable:
+# a study step by step), --dry-run (write the DAG, do not submit).
 #
 # Example, one dataset of the batch-norm study:
 #   export RFL_DATASET=Cho2017
@@ -22,15 +23,17 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/env.sh"
 [ "$#" -ge 1 ] || { sed -n '2,20p' "$0"; exit 2; }
 PLAN="$1"; shift
-ARGS=(); DRY=""
+ARGS=(); DRY=""; STEPS=""
 export RFL_WORKDIR="$(pwd -P)"
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --cpus|--memory|--disk|--retries) ARGS+=("$1" "$2"); shift 2 ;;
+        --step)   ARGS+=(--step "$2"); STEPS+="_$2"; shift 2 ;;
         --gpu)    ARGS+=(--extra "request_gpus = 1")
                   if [ "$#" -ge 2 ] && [[ "$2" != --* ]]; then
                       ARGS+=(--extra "+wantGpuType = \"$2\""); shift
                   fi; shift ;;
+        --flash)  ARGS+=(--extra "+isFlash = True"); shift ;;
         --short)  ARGS+=(--extra "+isShortJob = True"); shift ;;
         --long)   ARGS+=(--extra "+isLongJob = True"); shift ;;
         --group)  ARGS+=(--extra "+wishedAcctGroup = \"$2\""); shift 2 ;;
@@ -44,5 +47,5 @@ if [ -n "$DRY" ]; then
     echo "condor_submit_dag $DAG"
     exit 0
 fi
-condor_submit_dag -batch-name "${PLAN}_${RFL_DATASET:-}" "$DAG"
+condor_submit_dag -batch-name "${PLAN}_${RFL_DATASET:-}${STEPS:+_step${STEPS#_}}" "$DAG"
 echo "Follow: python -m rfl.experiments.pipeline status $PLAN   (and condor_q)"

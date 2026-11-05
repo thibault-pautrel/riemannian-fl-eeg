@@ -45,16 +45,22 @@ def main() -> int:
 
     # Each subject is loaded once, as the runners load it: recent MOABB versions resolve
     # the files lazily (data_path alone may download nothing), so only a load proves that
-    # the data are on disk. The load also records the trial counts (rfl/data/stats.py).
+    # the data are on disk. The load also records the trial counts (rfl/data/stats.py)
+    # and writes the trials to the cache the jobs read (rfl/data/cache.py). A subject
+    # already cached is not read again: RFL_DATA_CACHE=refresh rereads the raw files.
     import warnings
     warnings.filterwarnings("ignore", category=FutureWarning)    # MNE montage notices
-    from rfl.data.data_utils import load_moabb_dataset
+    from rfl.data.data_utils import load_moabb_dataset, resolve_resample
+    from rfl.data.registry import get_sampling_rate
     from rfl.data.stats import stats_path
+    # The rate of the runs (--resample 128 by default), so the trial cache written here
+    # is the one the runs read (rfl/data/cache.py).
+    rate = resolve_resample(128.0, get_sampling_rate(a.dataset))
     missing = []
     for s in get_subjects(a.dataset):
         for attempt in range(1, a.retries + 1):
             try:
-                load_moabb_dataset(a.dataset, [s], resample=128.0, verbose=False)
+                load_moabb_dataset(a.dataset, [s], resample=rate, verbose=False)
                 print(f"subject {s:3d}: ok (on disk, trials counted)", flush=True)
                 break
             except Exception as e:                      # noqa: BLE001
@@ -63,8 +69,11 @@ def main() -> int:
                 time.sleep(a.wait)
         else:
             missing.append(s)
+    from rfl.data.cache import cache_mode, cache_root
     print(f"\n{a.dataset}: {len(missing)} subject(s) missing" +
           (f": {missing}" if missing else f". Statistics: {stats_path(a.dataset)}"))
+    if cache_mode() != "off" and not missing:
+        print(f"Trials of the runs cached in {cache_root() / a.dataset}")
     return 1 if missing else 0
 
 

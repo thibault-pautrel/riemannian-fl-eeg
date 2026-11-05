@@ -362,3 +362,24 @@ def test_study_dag_runs_three_chains_side_by_side(tmp_path, monkeypatch):
     assert len(parents) == 8 + 2
     assert not any("N8_" in p and "N9_" in p for p in parents)      # chains independent
     assert "RFL_DAG=1" in (tmp_path / "dag" / "N3_mi_spdnet_bn_sweep1.sub").read_text()
+
+
+def test_a_study_dag_can_hold_one_step(tmp_path, monkeypatch):
+    import rfl.experiments.pipeline as PL
+    monkeypatch.setenv("RFL_RESULTS", str(tmp_path))
+    monkeypatch.setenv("RFL_DATASET", "BNCI2014_001")
+    names = [PL.step_name(i, s) for i, s in enumerate(PL.steps("mi_study"))]
+    tslr = names.index(next(n for n in names if n.endswith("tslr_final")))
+    assert PL.step_index("mi_study", "N0") == 0 == PL.step_index("mi_study", names[0])
+    assert PL.step_index("mi_study", str(tslr)) == tslr
+    with pytest.raises(SystemExit, match="unknown step"):
+        PL.step_index("mi_study", "N99")
+    assert PL.previous_step("mi_study", 0) is None and PL.previous_step("mi_study", 1) == 0
+    assert PL.previous_step("mi_study", tslr) is None          # first of its chain
+    dag = PL.write_dag("mi_study", directory=tmp_path / "d", only=[str(tslr)]).read_text()
+    assert dag.count("JOB ") == 1 and f"JOB {names[tslr]} " in dag and "PARENT" not in dag
+    assert f"pre mi_study {tslr} " in dag                      # the global step index
+    two = PL.write_dag("mi_study", directory=tmp_path / "e", only=["0", "1"]).read_text()
+    assert two.count("JOB ") == 2 and f"PARENT {names[0]} CHILD {names[1]}" in two
+    with pytest.raises(SystemExit, match="not finished"):    # the floors are not computed
+        PL.write_dag("mi_study", directory=tmp_path / "f", only=["1"])

@@ -309,7 +309,7 @@ class FLClient:
         for epoch in range(n_epochs):
             batches = self.train_loader
             if verbose:
-                batches = tqdm(batches, leave=False,
+                batches = tqdm(batches, leave=False, disable=None,   # off in job logs
                                desc=f"Client {self.client_id} epoch {epoch + 1}/{n_epochs}")
 
             for inputs, labels in batches:

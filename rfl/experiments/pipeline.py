@@ -27,6 +27,7 @@ Usage (from the folder where the plan's relative paths make sense):
     python -m rfl.experiments.pipeline run mi_spdnet_bn --jobs 4   # here, until the end
     bash condor/submit_dag.sh mi_spdnet_bn --memory 12GB           # HTCondor DAG
     python -m rfl.experiments.pipeline status mi_spdnet_bn
+    bash condor/submit_dag.sh mi_spdnet_bn --step 1                # one step only
 
 The DAG (written by `write_dag`, submitted by condor/submit_dag.sh) has one node per
 step. A node's PRE script writes the jobs still to run (it skips the node when there
@@ -87,6 +88,46 @@ def steps(plan: str) -> List[Step]:
 
 def step_name(i: int, step: Step) -> str:
     return f"N{i}_" + (step.name if _is_command(step) else f"{step[0]}_{step[1]}")
+
+
+def step_index(plan: str, ref: str) -> int:
+    """Index of a step from its number ("3"), node prefix ("N3") or node name."""
+    all_steps = steps(plan)
+    names = [step_name(i, st) for i, st in enumerate(all_steps)]
+    r = ref[1:] if ref[:1] in "Nn" and ref[1:].isdigit() else ref
+    if r.isdigit() and int(r) < len(all_steps):
+        return int(r)
+    if ref in names:
+        return names.index(ref)
+    raise SystemExit(f"unknown step {ref!r} of {plan}. Steps:\n  " + "\n  ".join(names))
+
+
+def step_finished(plan: str, i: int) -> bool:
+    """Whether step `i` is finished, without running or selecting anything: a command
+    whose test passes, or a stage whose jobs are all done (or abandoned) and, before
+    the final stage, whose selection is written."""
+    st = steps(plan)[i]
+    if _is_command(st):
+        return bool(st.done())
+    try:
+        jobs = plan_jobs(st[0], st[1])
+    except SystemExit:
+        return False
+    from rfl.experiments.grid import selection_path
+    if any(j.state() not in ("done", "abandoned") for j in jobs):
+        return False
+    return (st[1] == "final" or not jobs
+            or selection_path(plan_namespace(st[0]), st[1]).exists())
+
+
+def previous_step(plan: str, i: int) -> Optional[int]:
+    """The step before `i` in its chain, or None for the first step of a chain."""
+    start = 0
+    for chain in branches(plan):
+        if i < start + len(chain):
+            return None if i == start else i - 1
+        start += len(chain)
+    raise IndexError(i)
 
 
 def advance(plan: str, stage: str, metric: str = "val_acc", check: bool = False,
@@ -186,17 +227,31 @@ _RFL_SUB = Path(__file__).resolve().parents[2] / "condor" / "rfl.sub"
 
 def write_dag(plan: str, cpus: int = 4, memory: str = "8GB", disk: str = "1GB",
               extra: Sequence[str] = (), retries: int = 20,
-              directory: Optional[Path] = None) -> Path:
+              directory: Optional[Path] = None,
+              only: Optional[Sequence[str]] = None) -> Path:
     """Write the DAG of a study and its node files. Returns the .dag path.
 
     `extra`: submit lines added to every node (GPU, duration class, accounting group).
+    `only`: the steps to put in the DAG (numbers or node names, see `step_index`), to
+    run a study step by step. The step before the first of them in each chain must be
+    finished (`step_finished`).
     The environment of this process (RFL_*, MNE_DATA) is recorded in dag_env.sh, so the
     PRE and POST scripts and the jobs see the same folders and dataset.
     """
     repo = Path(os.environ.get("RFL_REPO", Path(__file__).resolve().parents[2]))
     ns = plan_namespace(plan)
+    keep = None
+    if only:
+        keep = sorted({step_index(plan, r) for r in only})
+        for i in keep:
+            prev = previous_step(plan, i)
+            if prev is not None and prev not in keep and not step_finished(plan, prev):
+                raise SystemExit(f"{step_name(i, steps(plan)[i])} needs "
+                                 f"{step_name(prev, steps(plan)[prev])}, which is not "
+                                 f"finished (python -m rfl.experiments.pipeline status {plan})")
+    tag = "" if keep is None else "_step" + "-".join(str(i) for i in keep)
     d = directory or (results_root() / "condor" /
-                      f"dag_{ns}_{time.strftime('%Y%m%d_%H%M%S')}")
+                      f"dag_{ns}{tag}_{time.strftime('%Y%m%d_%H%M%S')}")
     (d / "logs").mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items()
            if k.startswith("RFL_") or k == "MNE_DATA"}
@@ -230,6 +285,8 @@ def write_dag(plan: str, cpus: int = 4, memory: str = "8GB", disk: str = "1GB",
     for i, st in enumerate(steps(plan)):
         name = step_name(i, st)
         names.append(name)
+        if keep is not None and i not in keep:
+            continue
         sub = d / f"{name}.sub"
         if _is_command(st):
             args = " ".join(st.argv)
@@ -249,7 +306,8 @@ def write_dag(plan: str, cpus: int = 4, memory: str = "8GB", disk: str = "1GB",
                   f"RETRY {name} {retries}"]
     start = 0
     for chain in branches(plan):           # each chain in order, the chains side by side
-        own = names[start:start + len(chain)]
+        own = [n for k, n in enumerate(names[start:start + len(chain)], start)
+               if keep is None or k in keep]
         lines += [f"PARENT {a} CHILD {b}" for a, b in zip(own, own[1:])]
         start += len(chain)
     dag = d / "study.dag"
@@ -276,6 +334,7 @@ def status(plan: str) -> None:
             counts[j.state()] = counts.get(j.state(), 0) + 1
         print(f"{name:45s} {len(jobs)} jobs  "
               + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    print(f"One step at a time: bash condor/submit_dag.sh {plan} --step N  (N of N<N>_...)")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -295,6 +354,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     w.add_argument("--extra", action="append", default=[],
                    help="a submit line added to every node (repeatable)")
     w.add_argument("--retries", type=int, default=20)
+    w.add_argument("--step", action="append", default=None, dest="only",
+                   help="only this step, by number or node name (repeatable)")
     for name in ("pre", "post"):
         q = sub.add_parser(name, help=f"DAG {name.upper()} script of one node")
         q.add_argument("plan")
@@ -308,7 +369,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     elif a.cmd == "status":
         status(a.plan)
     elif a.cmd == "dag":
-        print(write_dag(a.plan, a.cpus, a.memory, a.disk, a.extra, a.retries))
+        print(write_dag(a.plan, a.cpus, a.memory, a.disk, a.extra, a.retries,
+                        only=a.only))
     elif a.cmd == "pre":
         return dag_pre(a.plan, a.index, a.jobs_file)
     elif a.cmd == "post":

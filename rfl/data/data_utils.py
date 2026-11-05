@@ -257,8 +257,26 @@ def load_moabb_dataset(
     # One subject at a time, as MNE Epochs: their channel names let the subjects be
     # aligned by name. The arrays are those of paradigm.get_data (Epochs.get_data times
     # the dataset unit factor, as MOABB computes them).
-    chunks = [_load_subject(paradigm, dataset, subj, max_retries, retry_delay, verbose)
-              for subj in subjects]
+    # The trials of each subject come from the cache when it holds them (rfl/data/cache.py).
+    from rfl.data import cache
+    mode = cache.cache_mode()
+    key, description = cache.cache_key(dataset_name, {
+        "n_classes": config['n_classes'], "events": list(config['events']),
+        "resample": None if not resample else float(resample),
+        "fmin": float(fmin), "fmax": float(fmax),
+        "tmin": config.get('tmin', 0.0), "tmax": config.get('tmax', None),
+        "dataset_kwargs": dataset_kwargs, "unit_factor": dataset.unit_factor})
+    chunks = []
+    for subj in subjects:
+        path = cache.subject_file(dataset_name, key, subj)
+        got = cache.load_subject(path) if mode == "on" else None
+        if got is None:
+            got = _load_subject(paradigm, dataset, subj, max_retries, retry_delay, verbose)
+            if mode != "off":
+                cache.save_subject(path, got, description)
+        elif verbose:
+            logger.info(f"  subject {subj}: trials read from the cache")
+        chunks.append(got)
     chunks = [c for group in chunks for c in group]
     X, y, meta = _align_channels(chunks, dataset_name, verbose)
 

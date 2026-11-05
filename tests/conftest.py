@@ -22,3 +22,11 @@ def restore_torch_determinism():
     before = torch.are_deterministic_algorithms_enabled()
     yield
     torch.use_deterministic_algorithms(before)
+
+
+@pytest.fixture(autouse=True)
+def isolated_results(tmp_path, monkeypatch):
+    """Keep every test away from the user's results folder and trial cache."""
+    monkeypatch.setenv("RFL_RESULTS", str(tmp_path / "results"))
+    # The trial cache (rfl/data/cache.py) is off, except in the tests that turn it on.
+    monkeypatch.setenv("RFL_DATA_CACHE", "off")

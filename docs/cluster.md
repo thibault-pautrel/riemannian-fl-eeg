@@ -74,7 +74,7 @@ the Python environment and sets `$RFL_RESULTS`, which the commands below use.
 ### 3. Check the cluster with the smoke plan
 
 ```bash
-bash condor/submit.sh smoke                  # 17 jobs, a few minutes each
+bash condor/submit.sh smoke --flash --cpus 1 --memory 2GB   # 17 jobs, minutes each
 condor_q                                     # your jobs: idle, running, held
 python -m rfl.experiments.grid smoke --status    # done / failed / pending
 python -m rfl.analysis.report $RFL_RESULTS/smoke --by arch aggregation scope participation eps
@@ -85,14 +85,24 @@ Then, once a dataset is downloaded, the same check on real EEG: five short runs
 
 ```bash
 export RFL_DATASET=BNCI2014_001
-bash condor/submit.sh smoke_real --short
+bash condor/submit.sh smoke_real --flash --cpus 1 --memory 2GB
 python -m rfl.experiments.grid smoke_real --status
 ```
 
-The worker nodes have no network. Recent MOABB versions (1.7) fetch some datasets
-from NEMAR and may query its server at every load. If `smoke_real` fails on the nodes
-with a network error while it runs on the user interface, install the MOABB version of
-the paper runs, `pip install "moabb==1.5.0"`, download again, and resubmit.
+The worker nodes have no network. `fetch_data.sh` writes the preprocessed trials of each
+subject to `$MNE_DATA/rfl-cache` (see [data.md](data.md#trial-cache)), and the jobs read
+them from there. When a job does read raw files, `run_one.sh` sets
+`MOABB_DOWNLOAD_PROVIDER=upstream`: with MOABB 1.7 and the default `auto`, the datasets
+that have a NEMAR mirror ask NEMAR for every subject before they read the local files
+(about 40 s per subject offline). To check that a downloaded dataset loads without
+network, raw files included, on the user interface:
+
+```bash
+RFL_DATA_CACHE=refresh MOABB_DOWNLOAD_PROVIDER=upstream \
+    HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 bash condor/fetch_data.sh <dataset>
+```
+
+Every subject should read `ok (on disk, trials counted)`, without `Retrying` lines.
 
 Every job should end as `done`. The accuracies of the smoke plan mean nothing (one
 seed, no tuning). It only checks that the main options run on the worker nodes. It has
@@ -175,7 +185,7 @@ with a warning, and the other arms go on. Submitting the same DAG again is safe 
 first one has ended: finished steps are skipped and finished jobs are not rerun. One DAG
 per dataset at a time, each with its own `RFL_DATASET`: they run side by side.
 `mi_spdnet_bn` and `mi_datasize` share the calibration nodes: submit the second one once
-the calibration of the first is finished, or submit `mi_study`, which runs both. `bash condor/submit_dag.sh smoke_auto --short`
+the calibration of the first is finished, or submit `mi_study`, which runs both. `bash condor/submit_dag.sh smoke_auto --flash --cpus 1 --memory 2GB`
 checks the mechanism on the cluster in minutes, `bash condor/submit_dag.sh synth_bn
 --short` the whole batch-norm protocol on synthetic data, and `python -m
 rfl.experiments.pipeline run <plan> --jobs N` runs the same steps on a laptop.
@@ -195,6 +205,22 @@ python -m rfl.experiments.pipeline status mi_study
 
 Then the next dataset, in the same way, once its data are downloaded. The `--memory`
 of each dataset is in the table of [Data](data.md#data).
+
+#### Step by step
+
+`--step N` puts only step N in the DAG (its number in `pipeline status`, `N3_...`), with
+the same retries, selection and grid extension. It refuses a step whose predecessor in
+its chain is not finished. Check the results of each step before the next one:
+
+```bash
+bash condor/submit_dag.sh mi_study --step 0 --cpus 1 --memory 2GB   # ReEig floors
+python -m rfl.experiments.pipeline status mi_study                  # N0 done?
+bash condor/submit_dag.sh mi_study --step 1 --cpus 1 --memory 2GB   # calibration, sweep 1
+python -m rfl.experiments.grid mi_spdnet_bn_calib --stage sweep1 --status
+```
+
+The chains are independent: the EEGNet and TS+LR steps can run while SPDNet goes on.
+Short steps (the floors, TS+LR) fit the flash class (`--flash`, one hour per job).
 
 ### 5. Monitor and fix
 
@@ -239,7 +265,7 @@ selection of the stage before it.
 | `--cpus N` | 4 | cores per job (PyTorch uses this many threads) |
 | `--memory SIZE` | 8GB | memory per job. Long private runs need more (the accountant composes many steps) |
 | `--gpu [TYPE]` | none | one GPU, of a MUST type (`t4`, `v100`, `a100`, ...). SPDNet runs well on CPU |
-| `--short`, `--long` | 4 days (8 days for GPU jobs) | MUST duration classes: 2 days, 8 days |
+| `--flash`, `--short`, `--long` | 4 days (8 days for GPU jobs) | MUST duration classes: 1 hour, 2 days, 8 days. Flash jobs use reserved slots of one core and 2GB, often free when the cluster is full |
 | `--disk SIZE` | 1GB | local disk per job |
 | `--group NAME` | default group | accounting group, e.g. `group_usmb.<group>` (`cat /etc/condor/mapfile \| grep $(id -un)`) |
 | `--retry-failed` | | also resubmit failed and interrupted jobs (once `condor_q` shows none of the plan) |

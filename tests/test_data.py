@@ -374,3 +374,55 @@ def test_no_rest_on_a_dataset_without_rest_is_an_error():
     meta = pd.DataFrame({"event": ["left_hand", "right_hand"] * 2})
     with pytest.raises(ValueError, match="no 'rest'"):
         filter_binary_task(X, y, meta, task="no_rest", verbose=False)
+
+
+
+# ---- trial cache (rfl/data/cache.py) ------------------------------------------
+def test_trial_cache_returns_the_same_arrays(tmp_path):
+    from rfl.data.cache import load_subject, save_subject
+    rng = np.random.default_rng(0)
+    meta = pd.DataFrame({"subject": np.array([3, 3, 3], dtype=np.int64),
+                         "session": np.array(["0train", "0train", "1test"], dtype=object),
+                         "run": np.array(["0", "1", "0"], dtype=object)})
+    chunks = [(rng.standard_normal((3, 4, 5)), np.array(["feet", "tongue", "feet"]), meta,
+               ["C3", "Cz", "C4", "Pz"]),
+              (rng.standard_normal((2, 3, 5)), np.array(["a", "b"], dtype=object),
+               meta.iloc[:2].reset_index(drop=True), ["C3", "Cz", "C4"])]
+    path = tmp_path / "c" / "subject_003.npz"
+    save_subject(path, chunks, {"dataset": "x"})
+    got = load_subject(path)
+    assert len(got) == 2 and (tmp_path / "c" / "params.json").exists()
+    for (X, y, m, ch), (X2, y2, m2, ch2) in zip(chunks, got):
+        assert X2.dtype == X.dtype and np.array_equal(X, X2)
+        assert y2.dtype == y.dtype and np.array_equal(y, y2)
+        pd.testing.assert_frame_equal(m, m2)
+        assert ch2 == ch
+    assert load_subject(tmp_path / "missing.npz") is None
+    (tmp_path / "c" / "bad.npz").write_bytes(b"not a zip")
+    assert load_subject(tmp_path / "c" / "bad.npz") is None
+
+
+def test_loader_reads_the_cache(fake_moabb, tmp_path, monkeypatch):
+    from rfl.data.data_utils import load_moabb_dataset
+    monkeypatch.setenv("MNE_DATA", str(tmp_path))
+    monkeypatch.setenv("RFL_DATA_CACHE", "on")
+    calls = []
+    real = _FakeParadigm.get_data
+    monkeypatch.setattr(_FakeParadigm, "get_data", lambda self, d, subjects, **k: (
+        calls.append(subjects[0]) or real(self, d, subjects, **k)))
+    fake_moabb.chans = {1: {"0": ["C3", "Cz"]}, 2: {"0": ["Cz", "C3"]}}
+    first = load_moabb_dataset("Cho2017", [1, 2], resample=128.0, verbose=False)
+    assert calls == [1, 2] and len(list(tmp_path.glob("rfl-cache/Cho2017/*/subject_*.npz"))) == 2
+    again = load_moabb_dataset("Cho2017", [1, 2], resample=128.0, verbose=False)
+    assert calls == [1, 2]                                        # read from the cache
+    for a, b in zip(first[:2], again[:2]):
+        assert a.dtype == b.dtype and np.array_equal(a, b)
+    pd.testing.assert_frame_equal(first[2], again[2])
+    load_moabb_dataset("Cho2017", [1], resample=128.0, fmax=30.0, verbose=False)
+    assert calls == [1, 2, 1]                                     # other settings, other key
+    monkeypatch.setenv("RFL_DATA_CACHE", "refresh")
+    load_moabb_dataset("Cho2017", [2], resample=128.0, verbose=False)
+    assert calls == [1, 2, 1, 2]
+    monkeypatch.setenv("RFL_DATA_CACHE", "off")
+    load_moabb_dataset("Cho2017", [1], resample=64.0, verbose=False)
+    assert len(list(tmp_path.glob("rfl-cache/Cho2017/*"))) == 2  # nothing written

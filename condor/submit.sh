@@ -8,15 +8,17 @@
 #   --memory SIZE      memory per job (default 8GB; long private runs may need 16GB)
 #   --disk SIZE        local disk per job (default 1GB)
 #   --gpu [TYPE]       request one GPU, optionally of a type (v100, t4, a100, ...)
-#   --short | --long   duration class on MUST (2 days, 8 days; default 4 days, and 8
-#                      days for GPU jobs)
+#   --flash | --short | --long
+#                      duration class on MUST (1 hour, 2 days, 8 days; default 4 days,
+#                      and 8 days for GPU jobs). Flash jobs run on reserved slots of one
+#                      core and 2GB: the right class for the smoke tests.
 #   --group NAME       accounting group, e.g. group_usmb.listic
 #   --retry-failed     also resubmit the failed, interrupted and queued jobs. Use it
 #                      only when condor_q shows no job of this plan.
 #   --dry-run          write the jobs file and print the submit command only
 #
 # Examples:
-#   bash condor/submit.sh smoke
+#   bash condor/submit.sh smoke --flash --cpus 1 --memory 2GB
 #   bash condor/submit.sh mi_protocol sweep --memory 16GB
 #   bash condor/submit.sh mi_protocol final --gpu t4
 set -euo pipefail
@@ -40,6 +42,7 @@ while [ "$#" -gt 0 ]; do
         --memory) MEMORY="$2"; shift 2 ;;
         --disk)   DISK="$2"; shift 2 ;;
         --gpu)    GPU=1; if [ "$#" -ge 2 ] && [[ "$2" != --* ]]; then GPU_TYPE="$2"; shift; fi; shift ;;
+        --flash)  DURATION="+isFlash = True"; shift ;;
         --short)  DURATION="+isShortJob = True"; shift ;;
         --long)   DURATION="+isLongJob = True"; shift ;;
         --group)  GROUP="$2"; shift 2 ;;

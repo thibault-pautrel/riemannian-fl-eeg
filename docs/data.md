@@ -28,6 +28,25 @@ less simple than it looks, and the code handles them:
 * A symbolic link is replaced by its real path, so that every node and every process
   sees the same folder.
 
+### Trial cache
+
+Each load filters, resamples and cuts the trials of every subject from the raw files,
+which takes about a minute for BNCI2014_001 and much longer for the large datasets. The
+result depends only on the dataset, the subject and these settings, so the first load
+writes it to `<MNE_DATA>/rfl-cache/<dataset>/<key>/subject_<id>.npz` and every later
+load reads it back (`rfl/data/cache.py`). `fetch_dataset` fills the cache with the
+settings of the runs, so the jobs only read it.
+
+* The key is a hash of the classes, the band, the sampling rate, the window, the
+  dataset options and the versions of MOABB and MNE (listed in `params.json` next to
+  the files). Other settings give another key: a stale file is never read.
+* The arrays are stored exactly (float64, uncompressed), so a run gives the same result
+  with or without the cache. About 0.4 GB for BNCI2014_001, 5 GB for Schirrmeister2017.
+* Files are written under a temporary name and renamed, so parallel jobs never read a
+  partial file.
+* `RFL_DATA_CACHE=off` turns the cache off. `RFL_DATA_CACHE=refresh` rereads the raw
+  files and rewrites the cache of the subjects loaded.
+
 Each run prints `MNE data folder: ...` at its start. On MUST, `condor/env.sh` sets
 `MNE_DATA` on the shared filesystem (default: `mne_data` next to the repository). Run
 `condor/fetch_data.sh` on the user interface for each dataset, even if the files are

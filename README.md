@@ -59,21 +59,24 @@ bash condor/setup_must.sh               # .venv, dependencies, fast tests
 **In every terminal.** `source condor/env.sh` activates the environment and sets
 `RFL_RESULTS` (results), `MNE_DATA` (data, `../mne_data`) and the other paths.
 
-**Data.** Downloaded on the user interface, since the jobs have no network:
+**Data.** Downloaded on the user interface, since the jobs have no network. The same
+command writes the preprocessed trials to a cache that the jobs read
+([docs/data.md](docs/data.md#trial-cache)):
 
 ```bash
 nohup bash condor/fetch_data.sh BNCI2014_001 > fetch.log 2>&1 &
 ```
 
 **Check the cluster.** Synthetic runs, a small DAG, then five runs on the downloaded
-data. `G` is your accounting group (`grep $(id -un) /etc/condor/mapfile`).
+data. They use the flash class of MUST: at most one hour per job, on reserved slots of
+one core and 2GB.
 
 ```bash
-export RFL_DATASET=BNCI2014_001 G=group_usmb.listic
-R="--short --cpus 1 --disk 200MB --group $G"
-bash condor/submit.sh smoke $R --memory 2GB
-bash condor/submit_dag.sh smoke_auto $R --memory 2GB
-bash condor/submit.sh smoke_real $R --memory 4GB
+export RFL_DATASET=BNCI2014_001
+R="--flash --cpus 1 --memory 2GB"
+bash condor/submit.sh smoke $R
+bash condor/submit_dag.sh smoke_auto $R
+bash condor/submit.sh smoke_real $R
 python -m rfl.experiments.grid smoke_real --status
 ```
 
@@ -82,12 +85,14 @@ extension. Nothing is left to do by hand until the analysis.
 
 ```bash
 export RFL_DATASET=BNCI2014_001
-bash condor/submit_dag.sh mi_study --cpus 1 --memory 4GB --disk 200MB --group $G
+bash condor/submit_dag.sh mi_study --cpus 1 --memory 4GB
 python -m rfl.experiments.pipeline status mi_study      # needs RFL_DATASET in the shell
 condor_q -dag
 ```
 
-Submitting the same command again resumes the study. Finished runs are kept. Memory to
+Submitting the same command again resumes the study. Finished runs are kept. To check
+each step before the next, `--step N` submits one step only
+([docs/cluster.md](docs/cluster.md#step-by-step)). Memory to
 request, to check with `condor_history -af MemoryUsage RequestMemory` (MUST stops a job
 above 1.5 times its request):
 

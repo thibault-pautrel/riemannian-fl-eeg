@@ -56,6 +56,10 @@ rm -f "$SAVE_DIR/exit_code" "$SAVE_DIR/$RESULT" "$SAVE_DIR/queued"
 echo $(( $(cat "$SAVE_DIR/attempts" 2>/dev/null || echo 0) + 1 )) > "$SAVE_DIR/attempts"
 echo "$COMMAND" > "$SAVE_DIR/job_args"
 # One thread per requested core (set by the submit file), never the whole node.
+# The nodes have no network. MOABB then reads the files of each dataset's own source
+# rather than asking NEMAR first (about 40 s lost per subject offline). Checked offline
+# for the five datasets. The trials usually come from the cache (rfl/data/cache.py).
+export MOABB_DOWNLOAD_PROVIDER="${MOABB_DOWNLOAD_PROVIDER:-upstream}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 # Temporary files on the node's local scratch when HTCondor provides one.
 [ -n "${_CONDOR_SCRATCH_DIR:-}" ] && export TMPDIR="$_CONDOR_SCRATCH_DIR"

@@ -20,7 +20,10 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # PhysionetMI: MOABB also exposes 'rest'. Only the four balanced imagery classes are
-# used, since adding 'rest' makes the class distribution imbalanced.
+# used, since adding 'rest' makes the class distribution imbalanced. Subjects 88, 92 and
+# 100 follow another protocol (128 Hz; runs of 19 cues of 5.1 s with 1.4 s of rest for 88
+# and 92, of 12 cues for 100, against 15 cues of 4.1 s elsewhere): they are left out, as
+# in the literature and in the papers built on this code.
 DATASET_CONFIGS: Dict[str, Dict[str, Any]] = {
     "BNCI2014_001": {
         "n_classes": 4,
@@ -118,6 +121,9 @@ def mne_data_root(data_dir: Optional[str] = None) -> Tuple[str, str]:
     return d, os.path.realpath(os.path.expanduser(d))
 
 
+_ANNOUNCED: set = set()
+
+
 def configure_mne_paths(data_dir: Optional[str] = None, verbose: bool = True) -> str:
     """Point MNE and MOABB at one data folder, for this process, and return it.
 
@@ -127,7 +133,7 @@ def configure_mne_paths(data_dir: Optional[str] = None, verbose: bool = True) ->
     and every key of MNE_PATH_KEYS are then set in the environment of this process.
     Environment variables take precedence over the configuration file, so entries of
     that file pointing elsewhere (for example an old symbolic link) are ignored. They
-    are listed, and the file is never written.
+    are listed once per process, and the file is never written.
     """
     import os
 
@@ -144,7 +150,8 @@ def configure_mne_paths(data_dir: Optional[str] = None, verbose: bool = True) ->
         if v and os.path.realpath(os.path.expanduser(v)) != real:
             stale[k] = v
         os.environ[k] = real
-    if verbose:
+    if verbose and real not in _ANNOUNCED:
+        _ANNOUNCED.add(real)
         link = f" (from {d})" if os.path.abspath(os.path.expanduser(d)) != real else ""
         logger.info(f"MNE data folder: {real}{link}")
         if stale:

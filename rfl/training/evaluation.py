@@ -69,7 +69,7 @@ class Evaluator:
         all_predictions = []
         all_labels = []
 
-        pbar = tqdm(dataloader, desc=desc, leave=False)
+        pbar = tqdm(dataloader, desc=desc, leave=False, disable=None)   # off when not a terminal (job logs)
         for inputs, labels in pbar:
             inputs = inputs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)

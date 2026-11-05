@@ -745,3 +745,16 @@ def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasiz
     assert all("--optimizer" in j.args and "sgd" in j.args for j in eeg)
     ts = G.plan_jobs("mi_datasize_tslr", "final", check=True)
     assert len(ts) == 8 * 2 * 10 and {j.entry for j in ts} == {"tslr"}
+
+
+def test_log_filter_drops_a_tensor_printed_after_a_progress_bar():
+    from rfl.utils.log_filter import TensorPrintFilter
+    lines = ["\rEpoch 1 [Train]:   0%|  | 0/12 [00:00<?, ?it/s]tensor([[[ 3.0e-02,\n",
+             "          1.0e-02]]], dtype=torch.float64)\n",
+             "tensor([[-0.15,  0.10]])\n",
+             "loss=tensor(0.5) kept\n",
+             "Val - Loss: 1.2\n"]
+    out = list(TensorPrintFilter().filter(lines))
+    assert out[:3] == ["\rEpoch 1 [Train]:   0%|  | 0/12 [00:00<?, ?it/s]\n",
+                       "loss= kept\n", "Val - Loss: 1.2\n"]
+    assert "removed 3 printed tensors" in out[3] and len(out) == 4
