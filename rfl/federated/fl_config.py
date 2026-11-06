@@ -73,7 +73,8 @@ class FLConfig(ExperimentConfig):
     # SPDNet takes one of the last three, which keep the BiMap weights on the Stiefel
     # manifold (the other SPDNet parameters are averaged). EEGNet takes fedavg. Any
     # other pairing is refused. None: 'projavg' for SPDNet, 'fedavg' for EEGNet.
-    fl_aggregation: Literal['fedavg', 'projavg', 'rlavg', 'retavg'] | None = None
+    # Other means on St(n, p) are registered by name in aggregation.AGGREGATION_RULES.
+    fl_aggregation: str | None = None
 
     # Client weights, the same for every rule: uniform 1/k (False) or proportional to
     # the client training-set size (True).
@@ -240,9 +241,10 @@ class FLConfig(ExperimentConfig):
                     "fl_fedbn=False shares the SPD batch norm, which needs a running "
                     "mean that can be combined across clients: bn_type 'mean_only' with "
                     f"a mean in {SHARED_MEAN_TYPES}. Keep FedBN for the other layers.")
-        if self.fl_aggregation not in ('fedavg', 'projavg', 'rlavg', 'retavg'):
-            raise ValueError("fl_aggregation must be one of 'fedavg', 'projavg', "
-                             f"'rlavg', 'retavg'; got {self.fl_aggregation!r}")
+        from rfl.federated.aggregation import rule_names
+        if self.fl_aggregation not in rule_names():
+            raise ValueError(f"fl_aggregation must be one of {', '.join(rule_names())} "
+                             f"(rfl/federated/aggregation.py); got {self.fl_aggregation!r}")
 
         self._validate_personalisation()
 
@@ -271,16 +273,18 @@ class FLConfig(ExperimentConfig):
                 "the cosine schedule will stay flat.", stacklevel=2)
 
         # Aggregation rule and model: Riemannian rules for SPDNet, fedavg for EEGNet.
-        if self.model_type.lower() == 'spdnet' and self.fl_aggregation == 'fedavg':
+        from rfl.federated.aggregation import get_rule, rule_names
+        on_stiefel = get_rule(self.fl_aggregation).stiefel
+        if self.model_type.lower() == 'spdnet' and not on_stiefel:
             raise ValueError(
-                "SPDNet with fl_aggregation='fedavg': the mean of Stiefel matrices is off "
-                "the manifold, so the BiMap weights would no longer be orthonormal. Use "
-                "projavg, rlavg or retavg.")
-        if self.model_type.lower() == 'eegnet' and self.fl_aggregation != 'fedavg':
+                f"SPDNet with fl_aggregation={self.fl_aggregation!r}: the mean of Stiefel "
+                "matrices is off the manifold, so the BiMap weights would no longer be "
+                f"orthonormal. Use one of {', '.join(rule_names(stiefel=True))}.")
+        if self.model_type.lower() == 'eegnet' and on_stiefel:
             raise ValueError(
                 f"EEGNet with fl_aggregation={self.fl_aggregation!r}: the Riemannian "
-                "rules (projavg/rlavg/retavg) act on Stiefel weights, and EEGNet has "
-                "none, so the run would be FedAvg under another name. Use fedavg.")
+                "rules act on Stiefel weights, and EEGNet has none, so the run would be "
+                "FedAvg under another name. Use fedavg.")
 
         # Differential privacy.
         if not self.dp_enabled:

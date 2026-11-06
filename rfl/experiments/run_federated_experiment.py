@@ -554,9 +554,10 @@ def _build_arg_parser():
 
     # -- federation ------------------------------------------------------------
     g = p.add_argument_group("federation")
-    g.add_argument("--aggregation", type=str, default=None,
-                   choices=["fedavg", "projavg", "rlavg", "retavg"],
-                   help="Default: projavg for SPDNet, fedavg for EEGNet.")
+    from rfl.federated.aggregation import rule_names
+    g.add_argument("--aggregation", type=str, default=None, choices=list(rule_names()),
+                   help="Default: projavg for SPDNet, fedavg for EEGNet. Rules are "
+                        "registered in rfl/federated/aggregation.py (AGGREGATION_RULES).")
     g.add_argument("--subjects-per-client", type=int, default=1,
                    help="Real EEG only. Number of consecutive subjects in one client.")
     g.add_argument("--client-partition", default="subject", choices=["subject", "iid"],

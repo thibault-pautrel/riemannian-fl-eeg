@@ -39,6 +39,36 @@ The code is one package, `rfl`. `rfl/experiments/` holds the entry points, run w
 [Repository structure](../README.md#repository-structure)). Installed with `pip install -e .`, it
 runs from any folder.
 
+## Adding a mean on the Stiefel manifold
+
+The server looks up the aggregation rule by name in `AGGREGATION_RULES`
+(`rfl/federated/aggregation.py`), and so do `FLConfig` and `--aggregation`. A new mean
+on St(n, p) is one function of the client matrices, their normalised weights and the
+current global matrix:
+
+```python
+# rfl/federated/my_means.py
+def grassmann_orthogonal_mean(Ws, weights, base):
+    """Ws: client BiMap weights, each (n_in, n_out) with W^T W = I. Returns one."""
+    ...
+```
+
+registered at the end of `aggregation.py`:
+
+```python
+from rfl.federated.my_means import grassmann_orthogonal_mean
+register_stiefel_mean("gromean", grassmann_orthogonal_mean,
+                      "Grassmann mean of the subspaces, then mean in O(p)")
+```
+
+The rule then applies to every BiMap weight, the other parameters are averaged in
+Euclidean space, FedBN and FedPer are unchanged, and a run takes
+`--aggregation gromean`. A plan compares it with the others through
+`aggregations={"spdnet": ("projavg", "gromean")}`. Differential privacy is unaffected:
+the clients privatise their updates, and the server rule is post-processing.
+`tests/test_aggregation.py` shows the checks a new mean should pass (result on the
+manifold, consensus recovered, weights respected).
+
 ## Equivalence with the paper repositories
 
 On synthetic data, these runs of this repository and of the paper repositories give

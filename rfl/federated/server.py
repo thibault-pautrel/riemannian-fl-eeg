@@ -42,12 +42,9 @@ from sklearn.metrics import accuracy_score, f1_score
 from rfl.data.data_utils import filter_binary_task, load_moabb_dataset
 from rfl.federated.aggregation import (
     extract_stiefel_matrices_from_model,
-    fedavg_aggregate,
+    get_rule,
     identify_stiefel_keys,
     polar_projection,
-    projavg_aggregate,
-    retavg_aggregate,
-    rlavg_aggregate,
 )
 from rfl.federated.client import DATASET_SAMPLING_RATES, FLClient
 from rfl.utils.schedules import compute_round_lr  # noqa: F401  (re-exported)
@@ -219,7 +216,7 @@ class FLServer:
         """
         strategy = self.aggregation_strategy
 
-        if strategy != 'fedavg' and not self.is_spdnet:
+        if get_rule(strategy).stiefel and not self.is_spdnet:
             logger.info(f"[Warning] {strategy} is Stiefel-only (SPDNet); falling back to "
                   "fedavg for EEGNet. On a flat manifold the rules coincide, so the "
                   "fallback is loss-free.")
@@ -241,24 +238,12 @@ class FLServer:
 
     def _aggregate_rule(self, strategy, client_state_dicts, client_stiefel_matrices,
                         client_weights):
-        """Apply the aggregation rule `strategy` (see `aggregate_updates`)."""
-        if strategy == 'fedavg':
-            return fedavg_aggregate(client_state_dicts, client_weights, fedbn=self.fedbn)
-
-        if client_stiefel_matrices is None:
+        """Apply the aggregation rule `strategy` (aggregation.AGGREGATION_RULES)."""
+        rule = get_rule(strategy)
+        if rule.stiefel and client_stiefel_matrices is None:
             raise ValueError(f"{strategy} requires the client BiMap weights")
-
-        if strategy == 'projavg':
-            return projavg_aggregate(client_stiefel_matrices, client_state_dicts,
-                                     client_weights, fedbn=self.fedbn)
-        if strategy == 'rlavg':
-            return rlavg_aggregate(client_stiefel_matrices, client_state_dicts,
-                                   self.global_model, client_weights, fedbn=self.fedbn)
-        if strategy == 'retavg':
-            return retavg_aggregate(client_stiefel_matrices, client_state_dicts,
-                                    self.global_model, client_weights, fedbn=self.fedbn)
-
-        raise ValueError(f"Unknown aggregation strategy: {self.aggregation_strategy!r}")
+        return rule.aggregate(client_stiefel_matrices, client_state_dicts,
+                              self.global_model, client_weights, fedbn=self.fedbn)
 
     def _share_spd_batchnorm(self, agg, client_state_dicts, client_weights) -> None:
         """Replace the Euclidean average of SPD batch-norm running means, in place.

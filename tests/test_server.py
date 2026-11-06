@@ -325,3 +325,22 @@ def test_client_partition_is_refused_on_synthetic_data(tmp_path):
         F.prepare_args(["--synthetic-clients", str(tmp_path / "s.npz"),
                         "--client-partition", "iid"])
     assert "--client-partition" in err.getvalue()
+
+
+def test_a_registered_mean_runs_end_to_end(monkeypatch):
+    import rfl.federated.aggregation as A
+    monkeypatch.setattr(A, "AGGREGATION_RULES", dict(A.AGGREGATION_RULES))
+    calls = []
+
+    def mean(Ws, weights, base):
+        calls.append(len(Ws))
+        return A.polar_projection(sum(w * W for w, W in zip(weights, Ws)))
+
+    A.register_stiefel_mean("mymean", mean)
+    cfg = _cfg("spdnet", fl_aggregation="mymean", learning_rate=1e-3, lr_schedule="none")
+    clients, server = _federation(cfg)
+    _run(server, clients, 2)
+    assert calls and set(calls) == {3}
+    assert _ortho_err(server.global_state_dict["bimap.weight"]) < 1e-4
+    with pytest.raises(ValueError, match="EEGNet"):
+        _cfg("eegnet", fl_aggregation="mymean")

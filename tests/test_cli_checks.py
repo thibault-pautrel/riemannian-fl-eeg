@@ -169,7 +169,7 @@ def test_print_config_shows_the_resolved_configuration(mod, capsys, tmp_path):
     (["--dp-target-eps", "10", "--dp-clip-C", "1.0"], "--dp-enabled"),   # default values
     (["--head-refit-epochs", "0", "--head-refit-lr", "0.1"], "--head-refit-epochs"),
     (["--model", "eegnet", "--aggregation", "rlavg"], "Stiefel"),
-    (["--aggregation", "fedavg"], "projavg, rlavg or retavg"),
+    (["--aggregation", "fedavg"], "projavg, rlavg, retavg"),
     (["--subjects", "1", "1", "2"], "duplicates"),
     (["--task", "no_rest"], "no rest class"),
 ])

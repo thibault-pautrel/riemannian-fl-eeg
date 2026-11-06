@@ -30,6 +30,13 @@ export RFL_RESULTS
 export TMPDIR="${RFL_TMPDIR:-$RFL_RESULTS/.tmp}"
 mkdir -p "$TMPDIR" 2>/dev/null || true
 
+# MOABB reads the files of each dataset's own source. With the default ("auto"), the
+# datasets that have a NEMAR mirror ask NEMAR first, for every subject: about 40 s lost
+# per subject without network (the nodes), and a second download of the whole dataset
+# on the user interface when only the source files are on disk. For a first download
+# from NEMAR: MOABB_DOWNLOAD_PROVIDER=auto bash condor/fetch_data.sh <dataset>.
+export MOABB_DOWNLOAD_PROVIDER="${MOABB_DOWNLOAD_PROVIDER:-upstream}"
+
 export PYTHONUNBUFFERED=1
 export MPLBACKEND=Agg
 

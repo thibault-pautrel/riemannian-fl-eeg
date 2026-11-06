@@ -69,7 +69,7 @@ def test_local_only_needs_full_participation():
 
 
 def test_spdnet_takes_a_riemannian_rule_and_eegnet_fedavg():
-    with pytest.raises(ValueError, match="projavg, rlavg or retavg"):
+    with pytest.raises(ValueError, match="projavg, rlavg, retavg"):
         _cfg(fl_aggregation="fedavg")
     for agg in ("projavg", "rlavg", "retavg"):
         _cfg(fl_aggregation=agg)

@@ -91,15 +91,21 @@ python -m rfl.experiments.grid smoke_real --status
 
 The worker nodes have no network. `fetch_data.sh` writes the preprocessed trials of each
 subject to `$MNE_DATA/rfl-cache` (see [data.md](data.md#trial-cache)), and the jobs read
-them from there. When a job does read raw files, `run_one.sh` sets
-`MOABB_DOWNLOAD_PROVIDER=upstream`: with MOABB 1.7 and the default `auto`, the datasets
-that have a NEMAR mirror ask NEMAR for every subject before they read the local files
-(about 40 s per subject offline). To check that a downloaded dataset loads without
-network, raw files included, on the user interface:
+them from there. Fill the cache of a dataset with `fetch_data.sh` before its first
+study: a job that misses the cache recomputes the subject from the raw files, and a
+study starting hundreds of jobs at once would repeat that work in every job.
+
+`condor/env.sh` sets `MOABB_DOWNLOAD_PROVIDER=upstream`: MOABB then reads the files of
+each dataset's own source. With MOABB 1.7 and the default `auto`, the datasets that
+have a NEMAR mirror ask NEMAR for every subject before they read the local files (about
+40 s per subject offline), and download the NEMAR copy again on the user interface. For
+a first download from NEMAR, set it back for that command:
+`MOABB_DOWNLOAD_PROVIDER=auto bash condor/fetch_data.sh <dataset>`. To check that a
+downloaded dataset loads without network, raw files included, on the user interface:
 
 ```bash
-RFL_DATA_CACHE=refresh MOABB_DOWNLOAD_PROVIDER=upstream \
-    HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 bash condor/fetch_data.sh <dataset>
+RFL_DATA_CACHE=refresh HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 \
+    bash condor/fetch_data.sh <dataset>
 ```
 
 Every subject should read `ok (on disk, trials counted)`, without `Retrying` lines.
