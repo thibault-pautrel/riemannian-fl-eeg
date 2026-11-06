@@ -40,3 +40,6 @@ datasize_*.png
 
 # MNE / MOABB data (condor/env.sh puts it next to the repository, ../mne_data)
 mne_data/
+
+# Archives of changed files, unpacked into the repository
+changes_*.zip
