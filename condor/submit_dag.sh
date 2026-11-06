@@ -7,7 +7,8 @@
 # Options: --cpus N, --memory SIZE, --disk SIZE, --gpu [TYPE], --flash | --short | --long,
 # --group NAME (as condor/submit.sh), --retries N (passes per node, default 20),
 # --step N (only step N, by its number or node name in `pipeline status`; repeatable:
-# a study step by step), --dry-run (write the DAG, do not submit).
+# a study step by step), --priority N (HTCondor job priority, default 0: among your own
+# idle jobs, a higher one starts first), --dry-run (write the DAG, do not submit).
 #
 # Example, one dataset of the batch-norm study:
 #   export RFL_DATASET=Cho2017
@@ -34,6 +35,7 @@ while [ "$#" -gt 0 ]; do
                       ARGS+=(--extra "+wantGpuType = \"$2\""); shift
                   fi; shift ;;
         --flash)  ARGS+=(--extra "+isFlash = True"); shift ;;
+        --priority) ARGS+=(--extra "priority = $2"); shift 2 ;;
         --short)  ARGS+=(--extra "+isShortJob = True"); shift ;;
         --long)   ARGS+=(--extra "+isLongJob = True"); shift ;;
         --group)  ARGS+=(--extra "+wishedAcctGroup = \"$2\""); shift 2 ;;
