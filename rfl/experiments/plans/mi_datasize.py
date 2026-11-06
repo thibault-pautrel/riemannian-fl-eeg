@@ -57,10 +57,10 @@ N_CLASSES = DATASET_CONFIGS[DATASET]["n_classes"]
 SCENARIOS = scenarios(SETTINGS_DS["ns"], SETTINGS_DS["hetero"], K_REDUCED)
 NAME = f"mi_{DATASET}_datasize"
 
+# The horizon rule of the calibration (no practical cap), the batch down to 2.
 EXTEND = extend_rules({**_EXTEND,
                        "batch_size": {"factor": 2, "int": True, "min": 2,
-                                      "max": SETTINGS["batch_max"]},
-                       "horizon": {"factor": 1.5, "int": True, "max": 3000, "down": False}},
+                                      "max": SETTINGS["batch_max"]}},
                       N_CLASSES)
 SELECTION = SELECTION
 

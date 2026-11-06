@@ -71,7 +71,9 @@ def arch_name(arch: str) -> str:
 EXTEND = {
     "lr": {"factor": 3, "min": 1e-4, "max": 3.0},
     "batch_size": {"factor": 2, "int": True, "min": 8, "max": SETTINGS["batch_max"]},
-    "horizon": {"factor": 1.5, "int": True, "max": 1000, "down": False},
+    # No practical cap: an arm still improving at its longest horizon gets a longer one.
+    # (A cap of 1000 stopped four arms of BNCI2014_001 at 675 rounds, still improving.)
+    "horizon": {"factor": 1.5, "int": True, "max": 20000, "down": False},
     "--bn-momentum": {"factor": 3, "min": 1e-3, "max": 0.9},
     "--reeig-percentile": {"values": list(PERCENTILES)},
 }
