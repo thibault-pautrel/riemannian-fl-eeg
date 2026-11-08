@@ -122,7 +122,7 @@ Under DP the batch size must not exceed the smallest client training set.
 
 A federated run writes `config.json`, `environment.json` (library versions, git
 commit), `fl_results.json` (configuration, DP budget, reported metrics, re-fit
-metrics, ReEig activity per block, selection, per-round history), `fl_history.json`, `global_model_final.pt` (last
+metrics, ReEig activity per block, selection, per-round history), `global_model_final.pt` (last
 and selected global states) and, when something stays on the clients (personal or
 re-fitted heads, FedBN layers, local-only models), `client_states.pt`. The global state
 of the reported round (`best_state_dict` of `global_model_final.pt` with

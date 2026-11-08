@@ -31,7 +31,7 @@ rfl/federated/privacy/orchestration.py. Without DP, a round is local_epochs pass
 shuffled DataLoader.
 
 Writes, in <save-root>/<experiment-name>/<run-name> or --save-dir:
-    config.json, environment.json, fl_history.json, global_model_final.pt (last and
+    config.json, environment.json, global_model_final.pt (last and
     selected global states), client_states.pt (what stays on each client: personal
     heads, local normalisation layers, re-fitted heads) and
     fl_results.json (configuration, DP budget, reported metrics, personalised
@@ -277,8 +277,7 @@ def run_federated_experiment(
         final_metrics = server.get_metrics_at_round(sel_round) or last_round_metrics
 
     server.save_global_model(os.path.join(save_dir, "global_model_final.pt"))
-    with open(os.path.join(save_dir, "fl_history.json"), "w") as f:
-        json.dump(server.round_history, f, indent=2)
+    # The per-round history is written once, in fl_results.json ("round_history").
 
     # ---- the reported model on every client ------------------------------------
     # Global state of the reported round with each client's local keys of that round.
