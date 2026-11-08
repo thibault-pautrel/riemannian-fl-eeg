@@ -352,15 +352,16 @@ def test_protocol_drops_an_arm_without_choice(tmp_path, monkeypatch, capsys):
     assert "dropped" in capsys.readouterr().err
 
 
-def test_study_dag_runs_three_chains_side_by_side(tmp_path, monkeypatch):
+def test_study_dag_runs_four_chains_side_by_side(tmp_path, monkeypatch):
     from rfl.experiments import pipeline as PL
     monkeypatch.setenv("RFL_RESULTS", str(tmp_path))
     chains = PL.branches("mi_study")
-    assert [len(c) for c in chains] == [9, 3, 1]
+    assert [len(c) for c in chains] == [9, 3, 1, 5]
     dag = PL.write_dag("mi_study", directory=tmp_path / "dag").read_text()
     parents = [ln for ln in dag.splitlines() if ln.startswith("PARENT")]
-    assert len(parents) == 8 + 2
+    assert len(parents) == 8 + 2 + 4
     assert not any("N8_" in p and "N9_" in p for p in parents)      # chains independent
+    assert not any("N12_" in p for p in parents)
     assert "RFL_DAG=1" in (tmp_path / "dag" / "N3_mi_spdnet_bn_sweep1.sub").read_text()
 
 
@@ -383,3 +384,24 @@ def test_a_study_dag_can_hold_one_step(tmp_path, monkeypatch):
     assert two.count("JOB ") == 2 and f"PARENT {names[0]} CHILD {names[1]}" in two
     with pytest.raises(SystemExit, match="not finished"):    # the floors are not computed
         PL.write_dag("mi_study", directory=tmp_path / "f", only=["1"])
+
+
+def test_a_selected_stage_counts_as_finished(tmp_path, monkeypatch):
+    import json
+
+    import rfl.experiments.grid as G
+    import rfl.experiments.pipeline as PL
+    monkeypatch.setenv("RFL_RESULTS", str(tmp_path))
+
+    class Done:
+        def state(self, dead=False):
+            return "done"
+
+    monkeypatch.setattr(PL, "steps", lambda plan: [("p", "sweep1"), ("p", "sweep2")])
+    monkeypatch.setattr(PL, "plan_jobs", lambda plan, stage, **k: [Done()])
+    monkeypatch.setattr(PL, "plan_namespace", lambda plan: "ns_of_p")
+    assert not PL.step_finished("x", 0)                     # no selection yet
+    path = G.selection_path("ns_of_p", "sweep1")            # under the plan's NAME
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({}))
+    assert PL.step_finished("x", 0)

@@ -13,6 +13,8 @@ Architecture::
 `norm_type` selects the normalisation layer: 'none' (nn.Identity, no normalisation,
 the default) or 'batch' (BatchNorm2d, as in the original
 model). In federated runs BatchNorm stays on the client and is never aggregated (FedBN).
+`bn_momentum` is the update rate of the running mean and variance used at evaluation
+(PyTorch convention: running <- (1 - m) running + m batch; 0.1, the PyTorch default).
 The federated code sees state dicts only, so it finds these layers by their module
 names. The three slots ('temporal', 'spatial', 'separable') are named as follows::
 
@@ -72,9 +74,10 @@ class EEGNet(nn.Module):
         separable_kernel: Temporal kernel of the depthwise separable conv.
         dropout_type: 'Dropout' or 'SpatialDropout2D'.
         norm_type: 'none' or 'batch' (see the module docstring).
+        bn_momentum: Update rate of the BatchNorm running statistics, in (0, 1].
 
     Raises:
-        ValueError: On an unknown norm_type or dropout_type.
+        ValueError: On an unknown norm_type or dropout_type, or a momentum outside (0, 1].
     """
 
     def __init__(
@@ -93,6 +96,7 @@ class EEGNet(nn.Module):
         separable_kernel: int = 16,
         dropout_type: str = 'Dropout',
         norm_type: str = 'none',
+        bn_momentum: float = 0.1,
     ):
         super().__init__()
 
@@ -110,6 +114,9 @@ class EEGNet(nn.Module):
         self.pool1, self.pool2 = pool1, pool2
         self.separable_kernel = separable_kernel
         self.norm_type = norm_type
+        if not 0.0 < float(bn_momentum) <= 1.0:
+            raise ValueError(f"bn_momentum must lie in (0, 1], got {bn_momentum}")
+        self.bn_momentum = float(bn_momentum)
 
         dt = dropout_type.lower()
         if "spatial" in dt:
@@ -158,7 +165,7 @@ class EEGNet(nn.Module):
             module: nn.Module = nn.Identity()
         else:
             attr = f"batchnorm_{slot}"
-            module = nn.BatchNorm2d(num_features)
+            module = nn.BatchNorm2d(num_features, momentum=self.bn_momentum)
         setattr(self, attr, module)
         return attr
 

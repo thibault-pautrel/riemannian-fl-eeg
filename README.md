@@ -118,6 +118,10 @@ centralised reference: 18 arms. Protocol, the same for every arm:
    the best), on 3 seeds. A choice on the edge of its grid extends the grid by itself.
 3. Final runs on 10 other seeds, paired by seed across arms.
 
+The same 18 arms for EEGNet (`mi_eegnet_bn`, FedAvg): the centralised calibration
+chooses the momentum of its BatchNorm (`mi_eegnet_bn_calib`), then steps 2 and 3 are
+the same.
+
 **Data quantity** (`mi_datasize`, `_eegnet`, `_tslr`). Each subject keeps N
 calibration trials per class. In `U<N>` every subject has N, in `H<N>` a third of the
 subjects has N and the others all their trials. Every pair of head and normalisation

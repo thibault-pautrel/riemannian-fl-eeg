@@ -585,6 +585,92 @@ def test_batch_norm_study_calibrates_then_tunes_every_arm_alike(root, bn_plans, 
             assert bool(ns.head_refit_epochs) == ("_shared_" in j.arm)
 
 
+@pytest.fixture
+def eegnet_bn_plans(monkeypatch):
+    """The two plans of the EEGNet batch-norm study, imported for one dataset."""
+    import importlib
+
+    import rfl.experiments.plans.mi_eegnet_bn as main
+    import rfl.experiments.plans.mi_eegnet_bn_calib as calib
+    import rfl.experiments.plans.mi_spdnet_bn as spd
+    import rfl.experiments.plans.mi_spdnet_bn_calib as spd_calib
+
+    def load(dataset):
+        monkeypatch.setenv("RFL_DATASET", dataset)
+        for m in (spd_calib, spd, calib, main):
+            importlib.reload(m)
+    yield load
+    monkeypatch.delenv("RFL_DATASET", raising=False)
+    for m in (spd_calib, spd, calib, main):
+        importlib.reload(m)
+
+
+@pytest.mark.parametrize("dataset,batches", [("BNCI2014_001", {32, 64, 128}),
+                                             ("Cho2017", {16, 32, 64})])
+def test_eegnet_batch_norm_study_mirrors_the_spdnet_one(root, eegnet_bn_plans, dataset,
+                                                        batches):
+    """The 18 arms of mi_spdnet_bn with EEGNet: momentum calibrated centrally, then the
+    same tuning, seeds and selection, FedAvg, no recalibration of the statistics."""
+    import rfl.experiments.plans.mi_eegnet_bn as main
+    import rfl.experiments.plans.mi_spdnet_bn as spd
+    eegnet_bn_plans(dataset)
+    with pytest.raises(SystemExit, match="not found"):
+        G.plan_jobs("mi_eegnet_bn", "sweep1")             # calibrate first
+    c1 = _run_stage("mi_eegnet_bn_calib", "sweep1", 36)
+    assert {j.horizon for j in c1} == {200} and all(_parse(j).bn_momentum == 0.1 for j in c1)
+    c2 = _run_stage("mi_eegnet_bn_calib", "sweep2", 9)
+    assert {j.hp["--bn-momentum"] for j in c2} == {0.1, 0.01, 0.3}
+    s1 = _run_stage("mi_eegnet_bn", "sweep1", 648)
+    assert {j.batch_size for j in s1} == batches and {j.horizon for j in s1} == {200}
+    s2 = _run_stage("mi_eegnet_bn", "sweep2", 162)
+    assert {j.horizon for j in s2} == {100, 200, 300}
+    final = G.plan_jobs("mi_eegnet_bn", "final")
+    arms = {j.arm for j in final}
+    assert len(final) == 180 and len(arms) == 18
+    assert "fed_eegnet_local_bnshared" not in arms and "central_eegnet_iid_bn" not in arms
+    assert {j.seed for j in final} == set(range(101, 111))
+    assert main.SELECTION == spd.SELECTION and main.EXTEND == spd.EXTEND
+    for j in final:
+        ns = _parse(j)
+        bn = j.arm.endswith("_bn") or j.arm.endswith("bnshared")
+        assert ns.model == "eegnet" and ns.optimizer == "sgd"
+        assert ns.eegnet_norm_type == ("batch" if bn else "none")
+        assert ns.learning_rate == 0.1 and ns.batch_size == 32
+        assert ns.rounds == 300 if j.entry == "fed" else ns.epochs == 300
+        assert ns.bn_momentum == (0.3 if bn else 0.1) and not ns.bn_recalibrate
+        if j.entry == "fed":
+            assert ns.aggregation in (None, "fedavg")
+            assert (ns.client_partition == "iid") == ("_iid_" in j.arm)
+            assert ns.fedbn == (not j.arm.endswith("bnshared"))
+            assert bool(ns.head_refit_epochs) == ("_shared_" in j.arm)
+
+
+def test_mi_study_keeps_its_step_numbers():
+    from rfl.experiments.pipeline import steps as plan_steps
+    steps = [s if isinstance(s, tuple) else ("floors",) for s in plan_steps("mi_study")]
+    assert steps[9] == ("mi_datasize_eegnet", "sweep1")
+    assert steps[12] == ("mi_datasize_tslr", "final")
+    assert steps[13:] == [("mi_eegnet_bn_calib", "sweep1"), ("mi_eegnet_bn_calib", "sweep2"),
+                          ("mi_eegnet_bn", "sweep1"), ("mi_eegnet_bn", "sweep2"),
+                          ("mi_eegnet_bn", "final")]
+
+
+def test_eegnet_batch_norm_momentum():
+    import torch
+
+    from rfl.models.eegnet import EEGNet
+    from rfl.utils.config import ExperimentConfig
+    m = EEGNet(4, 22, 256, norm_type="batch", bn_momentum=0.3)
+    assert {b.momentum for b in m.modules() if isinstance(b, torch.nn.BatchNorm2d)} == {0.3}
+    assert EEGNet(4, 22, 256, norm_type="batch").batchnorm_temporal.momentum == 0.1
+    with pytest.raises(ValueError, match="bn_momentum"):
+        EEGNet(4, 22, 256, norm_type="batch", bn_momentum=0.0)
+    cfg = ExperimentConfig(model_type="eegnet", eegnet_norm_type="batch",
+                           spdnet_bn_momentum=0.01)
+    assert cfg.get_model_params()["bn_momentum"] == 0.01
+    assert "bn_momentum" not in ExperimentConfig(model_type="eegnet").get_model_params()
+
+
 def test_variants_are_checked(root):
     from rfl.experiments.protocol import Protocol, Variant
     with pytest.raises(ValueError, match="applies to no arm"):

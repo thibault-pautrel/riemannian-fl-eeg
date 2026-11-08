@@ -114,7 +114,7 @@ class ExperimentConfig:
     spdnet_use_batch_norm: bool = False
     spdnet_bn_type: str = 'mean_only'          # 'mean_only' | 'mean_var_scalar'
     spdnet_bn_mean_type: str = 'geometric_arithmetic_harmonic'   # see rfl/models/spdnet.py
-    spdnet_bn_momentum: float = 0.1            # running-mean update rate
+    spdnet_bn_momentum: float = 0.1            # running-statistics update rate (also EEGNet)
     spdnet_bn_norm_and_bias_mode: str = 'whitening'   # 'whitening' | 'parallel_transport'
     spdnet_bn_position: str = 'after_reeig'    # 'after_reeig' | 'before_reeig'
     # After training, set the running statistics of every batch norm (SPD batch norm, and
@@ -359,6 +359,10 @@ class ExperimentConfig:
                 'dropout_type': self.eegnet_dropout_type,
                 'norm_type': self.eegnet_norm_type,
             }
+            # One momentum field for both batch norms (--bn-momentum), so that the
+            # configuration hash of the runs without it is unchanged.
+            if str(self.eegnet_norm_type).lower() == 'batch':
+                params['bn_momentum'] = self.spdnet_bn_momentum
         elif self.model_type.lower() == 'spdnet':
             params = {
                 'hidden_dim': self.spdnet_hidden_dim,
@@ -488,7 +492,7 @@ class ExperimentConfig:
             if self.eegnet_norm_type == 'none':
                 logger.info("  Norm: none (no normalisation layer)")
             else:
-                logger.info("  Norm: batch (BatchNorm, FedBN local)")
+                logger.info(f"  Norm: batch (BatchNorm, momentum {self.spdnet_bn_momentum})")
         else:
             logger.info(f"  hidden_dim: "
                   f"{self.spdnet_hidden_dim if self.spdnet_hidden_dim is not None else 'auto (n_channels // 2)'}")

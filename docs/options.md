@@ -107,7 +107,7 @@ and in the library's SPDnet. The layers compute in float64.
 | Option | Default | Choices |
 |---|---|---|
 | `--bn-mean-type` | `geometric_arithmetic_harmonic` (GAH) | `affine_invariant`, `log_euclidean`, `arithmetic`, `harmonic`, `adaptive_geometric_arithmetic_harmonic`, `bures_wasserstein` |
-| `--bn-momentum` | 0.1 | update rate gamma of the running mean |
+| `--bn-momentum` | 0.1 | update rate gamma of the running mean (also the running mean and variance of the EEGNet BatchNorm) |
 | `--bn-type` | `mean_only` (`BatchNormSPDMean`, the scope of the paper) | `mean_var_scalar` (`BatchNormSPDMeanScalarVariance`, also a scalar dispersion) |
 | `--bn-norm-and-bias-mode` | `whitening` (Eq. 2 of the paper) | `parallel_transport` (`mean_only`, not with Bures-Wasserstein) |
 | `--bn-position` | `after_reeig` | `before_reeig` (SPDNetBN of Brooks et al., 2019) |
@@ -238,6 +238,16 @@ worst client. Report both for a personalisation study. On IID clients FedBN and 
 batch norm should give the same result, since every client sees the same distribution.
 A gap between batch norm and no batch norm can remain there: each IID client mixes all
 subjects, and the layer also acts within each batch.
+
+The same study for EEGNet. Plans `mi_eegnet_bn_calib` and `mi_eegnet_bn` run the 18
+arms with EEGNet and its BatchNorm (`--eegnet-norm-type batch`), with plain SGD and
+FedAvg. The calibration has one setting, the momentum of the BatchNorm running
+statistics (0.1, 0.01, 0.3, `--bn-momentum`), chosen on the centralised EEGNet after
+its learning rate and batch size. Steps 3 to 5 are those above: same grids, extensions,
+selection, seeds and splits. In both studies the running statistics used at evaluation
+are the momentum averages of training. A shared BatchNorm averages the clients' running
+means and variances with the other weights (FedAvg), a shared SPD batch norm takes the
+GAH mean of their running means (ProjAvg).
 
 A last training batch of a single matrix is dropped, since its batch statistics are
 undefined. DP refuses the layer: its running mean is computed on the private batch,

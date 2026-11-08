@@ -601,7 +601,9 @@ def _add_spd_bn_args(p) -> None:
     p.add_argument("--bn-mean-type", default=BN_DEFAULTS["bn_mean_type"],
                    choices=BN_MEAN_TYPES, help="Geometry of the batch mean.")
     p.add_argument("--bn-momentum", type=float, default=BN_DEFAULTS["bn_momentum"],
-                   help="Update rate of the running mean used at evaluation.")
+                   help="Update rate of the running statistics used at evaluation: the "
+                        "running mean of the SPD batch norm, or the running mean and "
+                        "variance of the EEGNet BatchNorm (--eegnet-norm-type batch).")
     p.add_argument("--bn-norm-and-bias-mode", default=BN_DEFAULTS["bn_norm_and_bias_mode"],
                    choices=BN_NORM_AND_BIAS_MODES,
                    help="Centring and bias by whitening or by parallel transport "

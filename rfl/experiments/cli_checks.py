@@ -40,7 +40,7 @@ def _val_driven(a) -> bool:
 
 DP = ("dp_target_eps", "dp_target_delta", "dp_clip_C", "dp_accounting",
       "dp_compare_prirfed", "dp_accountant_h")
-BN = ("bn_type", "bn_mean_type", "bn_momentum", "bn_norm_and_bias_mode", "bn_position")
+BN = ("bn_type", "bn_mean_type", "bn_norm_and_bias_mode", "bn_position")
 SPD = ("use_batch_norm", "hidden_dim", "epsilon", "hidden_dims", "epsilons",
        "trace_normalize", "stiefel", "reeig_percentile")
 COV = ("cov_estimator", "cov_shrinkage", "cov_regularization")
@@ -59,6 +59,8 @@ RULES: List[Rule] = [
      "only acts with --model spdnet --use-batch-norm"),
     (("eegnet_norm_type", "eegnet_input_norm"), lambda a: a.model == "eegnet",
      "only acts with --model eegnet"),
+    (("bn_momentum",), _bn_layer,
+     "only acts with a batch norm (--use-batch-norm, or --eegnet-norm-type batch)"),
     (("bn_recalibrate",), _bn_layer,
      "only acts with a batch norm (--use-batch-norm, or --eegnet-norm-type batch)"),
     (COV, lambda a: a.model == "spdnet" and _real(a),
