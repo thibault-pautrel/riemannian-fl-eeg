@@ -409,8 +409,3 @@ def rule_names(stiefel: Optional[bool] = None) -> Tuple[str, ...]:
     return tuple(k for k, r in AGGREGATION_RULES.items()
                  if stiefel is None or r.stiefel == stiefel)
 
-
-# New means on St(n, p) go here, for example:
-#     from rfl.federated.my_means import grassmann_orthogonal_mean
-#     register_stiefel_mean("gromean", grassmann_orthogonal_mean,
-#                           "Grassmann mean of the subspaces, then mean in O(p)")
