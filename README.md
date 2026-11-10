@@ -1,22 +1,19 @@
 # riemannian-fl-eeg
 
-Federated learning of SPDNet and EEGNet for motor-imagery EEG decoding (MOABB datasets).
-Personalisation and record-level differential privacy are independent options.
+Federated learning of SPDNet and EEGNet for motor-imagery EEG (MOABB datasets), with
+personalisation and record-level differential privacy as independent options.
 
-* **Models.** SPDNet (BiMap weights on the Stiefel manifold, optional SPD batch norm)
-  and EEGNet (optional BatchNorm).
-* **Aggregation.** SPDNet: ProjAvg, RLAvg or RetAvg. EEGNet: FedAvg.
-* **Personalisation.** Personal head (FedPer), head re-fit after training, batch norm
-  kept on each client (FedBN), local-only training.
-* **Privacy.** DP-RFedProj: per-sample tangent clipping, Gaussian noise and an f-DP
-  accountant.
-* **Baseline.** Tangent space + logistic regression (TS+LR), per client or pooled.
+* **Models.** SPDNet (BiMap weights on the Stiefel manifold, optional SPD batch norm),
+  EEGNet (optional BatchNorm).
+* **Aggregation.** SPDNet: ProjAvg, RLAvg, RetAvg. EEGNet: FedAvg.
+* **Personalisation.** Personal head (FedPer), head re-fit, FedBN, local-only training.
+* **Privacy.** DP-RFedProj: tangent clipping, Gaussian noise, f-DP accountant.
+* **Baseline.** Tangent space + logistic regression (TS+LR).
 
-The code merges the code of two papers, which keep their frozen repositories:
-*Projection-Based Federated Learning on Compact Submanifolds with Geometry-Independent
-Differential Privacy* (arXiv:2610.33712, repository `dp-rfedproj`) and *How much
-representation learning does federated EEG decoding need? The case of SPDNet*
-(arXiv:2609.29037, repository `icassp-spdnet-fl`).
+It merges the code of two papers, whose repositories stay frozen: *Projection-Based
+Federated Learning on Compact Submanifolds with Geometry-Independent Differential
+Privacy* (arXiv:2610.33712, `dp-rfedproj`) and *How much representation learning does
+federated EEG decoding need? The case of SPDNet* (arXiv:2609.29037, `icassp-spdnet-fl`).
 
 ## Installation
 
@@ -45,56 +42,35 @@ python -m rfl.analysis.report results/demo --by scope eps
 
 ## On MUST (HTCondor)
 
-Everything lives on the shared filesystem: code, environment, data, results.
-
-**Once.** In a VS Code terminal connected to `lappusmb.in2p3.fr`:
+Code, environment, data and results all sit on the shared filesystem. Details in
+[docs/cluster.md](docs/cluster.md).
 
 ```bash
+# Once, in a VS Code terminal on lappusmb.in2p3.fr
 cd /uds_data/<lab>/<login>
-git clone https://github.com/thibault-pautrel/riemannian-fl-eeg.git
-cd riemannian-fl-eeg
-bash condor/setup_must.sh               # .venv, dependencies, fast tests
-```
+git clone https://github.com/thibault-pautrel/riemannian-fl-eeg.git && cd riemannian-fl-eeg
+bash condor/setup_must.sh                # .venv, dependencies, fast tests
 
-**In every terminal.** `source condor/env.sh` activates the environment and sets
-`RFL_RESULTS` (results), `MNE_DATA` (data, `../mne_data`) and the other paths.
+# In every terminal
+source condor/env.sh                     # sets RFL_RESULTS, MNE_DATA, ...
 
-**Data.** Downloaded on the user interface, since the jobs have no network. The same
-command writes the preprocessed trials to a cache that the jobs read
-([docs/data.md](docs/data.md#trial-cache)):
-
-```bash
+# Data, on the user interface (the jobs have no network). Also fills the trial cache.
 nohup bash condor/fetch_data.sh BNCI2014_001 > fetch.log 2>&1 &
-```
 
-**Check the cluster.** Synthetic runs, a small DAG, then five runs on the downloaded
-data. They use the flash class of MUST: at most one hour per job, on reserved slots of
-one core and 2GB.
-
-```bash
+# Check the cluster (flash class: 1 h, 1 core, 2 GB)
 export RFL_DATASET=BNCI2014_001
 R="--flash --cpus 1 --memory 2GB"
 bash condor/submit.sh smoke $R
 bash condor/submit_dag.sh smoke_auto $R
 bash condor/submit.sh smoke_real $R
 python -m rfl.experiments.grid smoke_real --status
-```
 
-**One dataset, both studies, one DAG.** The DAG chains every step, selection and grid
-extension. Nothing is left to do by hand until the analysis.
-
-```bash
-export RFL_DATASET=BNCI2014_001
+# Both studies of one dataset, one DAG (resubmitting resumes it)
 bash condor/submit_dag.sh mi_study --cpus 1 --memory 4GB
-python -m rfl.experiments.pipeline status mi_study      # needs RFL_DATASET in the shell
+bash condor/submit_dag.sh mi_study --step 0 --flash      # or step N of `status` only
+python -m rfl.experiments.pipeline status mi_study
 condor_q -dag
 ```
-
-Submitting the same command again resumes the study. Finished runs are kept. To check
-each step before the next, `--step N` submits one step only
-([docs/cluster.md](docs/cluster.md#step-by-step)). Memory to
-request, to check with `condor_history -af MemoryUsage RequestMemory` (MUST stops a job
-above 1.5 times its request):
 
 | Dataset | Subjects | Channels | `--memory` |
 |---|---|---|---|
@@ -106,65 +82,44 @@ above 1.5 times its request):
 
 Do not edit or `git pull` the code while a DAG runs: the jobs read it from this folder.
 
-## The two studies
+## The studies
 
-**SPD batch norm** (`mi_spdnet_bn`). SPDNet without batch norm, with FedBN or with a
-shared batch norm, with a shared or personal head, on subject and IID clients, plus a
-centralised reference: 18 arms. Protocol, the same for every arm:
+| Plans | Question | Arms |
+|---|---|---|
+| `mi_spdnet_bn_calib`, `mi_spdnet_bn` | Does the SPD batch norm help federated SPDNet? | none, FedBN, shared BN x shared head, FedPer, local x subject or IID clients, + centralised: 18 |
+| `mi_eegnet_bn_calib`, `mi_eegnet_bn` | The same for EEGNet and its BatchNorm (FedAvg) | 18 |
+| `mi_datasize`, `_eegnet`, `_tslr` | From how many trials per class does federation beat local training? | 8 per model and scenario, + TS+LR |
 
-1. ReEig floors from the covariance spectrum, then a centralised calibration of the
-   architecture, floor percentile and running-mean momentum (`mi_spdnet_bn_calib`).
-2. Learning rate x batch size, then the horizon (shortest within one standard error of
-   the best), on 3 seeds. A choice on the edge of its grid extends the grid by itself.
-3. Final runs on 10 other seeds, paired by seed across arms.
-
-The same 18 arms for EEGNet (`mi_eegnet_bn`, FedAvg): the centralised calibration
-chooses the momentum of its BatchNorm (`mi_eegnet_bn_calib`), then steps 2 and 3 are
-the same.
-
-**Data quantity** (`mi_datasize`, `_eegnet`, `_tslr`). Each subject keeps N
-calibration trials per class. In `U<N>` every subject has N, in `H<N>` a third of the
-subjects has N and the others all their trials. Every pair of head and normalisation
-is an arm, for SPDNet and EEGNet (both plain SGD), tuned on its own and selected on the
-subjects with N trials:
-
-| Head | Option | | Normalisation | SPDNet | EEGNet |
-|---|---|---|---|---|---|
-| shared (+ re-fit) | (none) | | none | (none) | `--eegnet-norm-type none` |
-| personal | `--local-fc` | | FedBN | `--use-batch-norm` | `--eegnet-norm-type batch` |
-| local | `--local-only` | | shared | `... --no-fedbn` | `... --no-fedbn` |
-
-The batch-norm arms also set their running statistics exactly after training
-(`--bn-recalibrate`). TS+LR runs on the same subjects and trials.
-
-**Analysis.**
+Every arm is tuned alike: learning rate x batch size, then the horizon, on 3 seeds, with
+automatic grid extension. Final runs use 10 other seeds. Protocols in
+[docs/options.md](docs/options.md).
 
 ```bash
 python -m rfl.analysis.report $RFL_RESULTS/mi_BNCI2014_001_bn/final \
     --by clients scope arch --metric client_mean_acc
+python -m rfl.analysis.stats $RFL_RESULTS/mi_BNCI2014_001_bn/final \
+    --factor arch --by kind clients scope
 python -m rfl.analysis.datasize $RFL_RESULTS/mi_BNCI2014_001_datasize*/final \
     --out datasize_BNCI2014_001 --pairs
 ```
-
-The second command writes a table of both models and one figure per model: accuracy
-against N, one curve per arm, colour for the head, line style for the normalisation.
 
 ## Documentation
 
 | File | Content |
 |---|---|
-| [docs/cluster.md](docs/cluster.md) | MUST in detail: scripts, plans, monitoring and fixes, writing a plan |
-| [docs/options.md](docs/options.md) | Every option: personalisation, privacy, SPD batch norm, data quantity, checks, training protocol, depth |
-| [docs/data.md](docs/data.md) | Datasets and preprocessing, adding a dataset, output files, analysis tools |
-| [docs/design.md](docs/design.md) | How the code is organised, equivalence with the paper repositories, limitations |
+| [docs/cluster.md](docs/cluster.md) | MUST: scripts, plans, DAGs, monitoring, writing a plan |
+| [docs/options.md](docs/options.md) | Options and study protocols: personalisation, privacy, batch norm, data quantity, training |
+| [docs/data.md](docs/data.md) | Datasets, trial cache, adding a dataset, outputs, analysis |
+| [docs/design.md](docs/design.md) | Code organisation, adding a Stiefel mean, changes from the papers, limitations |
 
 ## Repository structure
 
 | Path | Content |
 |---|---|
 | `rfl/models/` | SPDNet, EEGNet, batch-norm recalibration |
-| `rfl/data/` | MOABB loading, registry, data reduction, synthetic data |
+| `rfl/data/` | MOABB loading, registry, trial cache, data reduction, synthetic data |
 | `rfl/federated/` | Client, server, aggregation, personalisation, DP (`privacy/`) |
+| `rfl/geometry/` | Stiefel and Grassmann tools |
 | `rfl/experiments/` | Runners, TS+LR, plans and their machinery (`grid.py`, `protocol.py`, `pipeline.py`) |
 | `rfl/analysis/` | Result tables, paired tests, data-quantity figures |
 | `condor/` | HTCondor scripts for MUST |
