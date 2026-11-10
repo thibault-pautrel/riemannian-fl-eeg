@@ -17,18 +17,10 @@ them (FLConfig refuses SPDNet with fedavg, whose extrinsic mean leaves the manif
 fedavg is the rule of EEGNet, whose parameters are all Euclidean.
 
 The rules are looked up by name in AGGREGATION_RULES (end of this module): the server,
-FLConfig and the --aggregation option read it. A new mean on St(n, p) is a function
-
-    mean(Ws, weights, base) -> W
-
-of the client matrices Ws (each of shape (n_in, n_out)), their normalised weights and
-the current global matrix `base` (W_t, for rules that need a base point). Registered
-with `register_stiefel_mean("mymean", mean)`, it is applied to every BiMap weight, the
-other parameters are averaged as above, FedBN and FedPer are unchanged, and the runs
-take `--aggregation mymean`. Differential privacy is unaffected: the clients privatise
-their updates and the server rule is post-processing.
-`test_a_registered_mean_is_a_full_rule` (tests/test_aggregation.py) shows a mean
-registered and checked against ProjAvg.
+FLConfig and the --aggregation option read it. A new rule is a function
+`<name>_aggregate` with the arguments of rlavg_aggregate, plus an entry in
+AGGREGATION_RULES. Differential privacy is unaffected: the clients privatise their
+updates and the server rule is post-processing.
 
 All non-Stiefel parameters (classifier, convolutions) are averaged in Euclidean space
 under every rule.
@@ -64,8 +56,7 @@ __all__ = [
     # aggregation rules
     "fedavg_aggregate", "projavg_aggregate", "rlavg_aggregate", "retavg_aggregate",
     # registry of the rules by name
-    "AggregationRule", "AGGREGATION_RULES", "register_stiefel_mean", "stiefel_rule",
-    "get_rule", "rule_names",
+    "AggregationRule", "AGGREGATION_RULES", "get_rule", "rule_names",
     # key and matrix identification
     "identify_stiefel_keys", "identify_batchnorm_keys",
     "extract_stiefel_matrices_from_model", "extract_stiefel_matrices_from_models",
@@ -328,11 +319,6 @@ def retavg_aggregate(
 # --------------------------------------------------------------------------- #
 #  Registry of the rules by name
 # --------------------------------------------------------------------------- #
-# mean(Ws, weights, base) -> W: weighted mean of the client matrices Ws on St(n, p).
-# `weights` are normalised (sum 1). `base` is the current global matrix W_t.
-StiefelMean = Callable[[List[torch.Tensor], List[float], torch.Tensor], torch.Tensor]
-
-
 @dataclass(frozen=True)
 class AggregationRule:
     """A rule as the server calls it.
@@ -344,30 +330,6 @@ class AggregationRule:
     aggregate: Callable[..., Dict[str, torch.Tensor]]
     stiefel: bool = True
     description: str = ""
-
-
-def stiefel_rule(mean: StiefelMean) -> Callable[..., Dict[str, torch.Tensor]]:
-    """The full aggregation rule built from a mean on St(n, p).
-
-    The mean is applied to each BiMap weight separately. Every other parameter is
-    averaged in Euclidean space, and the normalisation keys stay local under FedBN,
-    as in the rules above.
-    """
-    def aggregate(client_stiefel_matrices, client_state_dicts, global_model,
-                  weights=None, fedbn=True):
-        n = len(client_stiefel_matrices)
-        w = _normalize_weights(weights, n)
-        base = extract_stiefel_matrices_from_model(global_model)
-        stiefel_keys = set(base)
-        bn_keys = _local_keys(client_state_dicts[0], fedbn)
-        agg = OrderedDict()
-        for name in sorted(stiefel_keys):
-            agg[name] = mean([m[name].clone() for m in client_stiefel_matrices], w,
-                             base[name].clone())
-        for name in _euclidean_keys(client_state_dicts[0], bn_keys, stiefel_keys):
-            agg[name] = _weighted_average([sd[name] for sd in client_state_dicts], w)
-        return agg
-    return aggregate
 
 
 AGGREGATION_RULES: Dict[str, AggregationRule] = {
@@ -384,16 +346,6 @@ AGGREGATION_RULES: Dict[str, AggregationRule] = {
         lambda S, sds, g, w=None, fedbn=True: retavg_aggregate(S, sds, g, w, fedbn=fedbn),
         description="R_{W_t}(sum_i w_i R_{W_t}^{-1}(W_i)) (PriRFed)"),
 }
-
-
-def register_stiefel_mean(name: str, mean: StiefelMean, description: str = "",
-                          replace: bool = False) -> None:
-    """Make `mean` available as the aggregation rule `name` (module docstring)."""
-    if not name.isidentifier() or name != name.lower():
-        raise ValueError(f"rule name {name!r}: lower case letters, digits and '_'")
-    if name in AGGREGATION_RULES and not replace:
-        raise ValueError(f"aggregation rule {name!r} exists (replace=True to replace it)")
-    AGGREGATION_RULES[name] = AggregationRule(stiefel_rule(mean), True, description)
 
 
 def get_rule(name: str) -> AggregationRule:

@@ -8,7 +8,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from rfl.training.checkpointing import CheckpointManager
 from rfl.training.evaluation import Evaluator
-from rfl.training.train_loop import epoch_lr, setup_training, train_model
+from rfl.training.train_loop import setup_training, train_model
+from rfl.utils.schedules import compute_round_lr
 from rfl.utils.config import ExperimentConfig
 
 
@@ -43,17 +44,16 @@ def _run(tmp_path, cfg, seed=0):
 
 
 # ---- schedules ----------------------------------------------------------------
-def test_epoch_lr_endpoints_and_monotonicity():
-    lrs = [epoch_lr(1e-2, e, 10, 1e-4) for e in range(1, 11)]
+def test_cosine_rate_endpoints_and_monotonicity():
+    lrs = [compute_round_lr(1e-2, e, 10, "cosine", 1e-4) for e in range(1, 11)]
     assert lrs[0] == pytest.approx(1e-2) and lrs[-1] == pytest.approx(1e-4)
     assert all(a >= b for a, b in zip(lrs, lrs[1:]))
-    assert epoch_lr(1e-2, 1, 1, 1e-4) == 1e-2
+    assert compute_round_lr(1e-2, 1, 1, "cosine", 1e-4) == 1e-2
 
 
 @pytest.mark.parametrize("schedule", ["plateau", "step", "cosine", "none"])
 def test_centralised_rate_follows_the_shared_schedule(tmp_path, schedule):
     """The centralised loop uses rfl/utils/schedules.py exactly as the federated server."""
-    from rfl.utils.schedules import compute_round_lr
     cfg = _cfg(lr_schedule=schedule, lr_plateau_patience=1, lr_plateau_factor=0.5,
                lr_min=1e-5, epochs=12, learning_rate=1.0)
     _, _, out = _run(tmp_path, cfg)
@@ -67,11 +67,10 @@ def test_centralised_rate_follows_the_shared_schedule(tmp_path, schedule):
         assert h["learning_rate"][-1] == pytest.approx(0.3)
 
 
-def test_setup_training_returns_no_scheduler():
+def test_setup_training_returns_the_optimiser():
     for schedule in ("cosine", "none", "plateau", "step"):
-        _, sched = setup_training(nn.Linear(2, 2), _cfg(lr_schedule=schedule),
-                                  torch.device("cpu"))
-        assert sched is None
+        opt = setup_training(nn.Linear(2, 2), _cfg(lr_schedule=schedule), torch.device("cpu"))
+        assert isinstance(opt, torch.optim.Optimizer)
 
 
 # ---- train_model ----------------------------------------------------------------

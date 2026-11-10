@@ -122,16 +122,12 @@ def _write_stats(per_subject):
 
 
 def test_stats_file_merges_subjects(stats_dir):
-    from rfl.data.stats import client_train_sizes, load_stats
+    from rfl.data.stats import load_stats
     _write_stats({1: 10, 2: 20})
     _write_stats({3: 5})
     st = load_stats("BNCI2014_001")
     assert st["n_channels"] == 22 and set(st["trials"]) == {"1", "2", "3"}
     assert st["trials"]["2"]["feet"] == 20
-    assert client_train_sizes("BNCI2014_001", [1, 2, 3], 1, "all_classes", 0.75) == \
-        [30, 60, 15]
-    assert client_train_sizes("BNCI2014_001", [1, 2, 3], 2, "binary", 0.5) == [30, 5]
-    assert client_train_sizes("BNCI2014_001", [1, 9], 1, "binary", 0.5) is None
 
 
 def test_bimap_dimensions_are_checked_against_the_channels(stats_dir):

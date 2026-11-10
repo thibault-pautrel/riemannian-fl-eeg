@@ -79,24 +79,15 @@ def test_step_pld_dominates_exact_profile(mu0, q, h):
 # --------------------------------------------------------------------------- #
 #  Composition
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("mu0,n", [
-    pytest.param(0.05, 100, marks=pytest.mark.slow),
-    (0.02, 1000),
-    pytest.param(0.1, 50, marks=pytest.mark.slow),
-])
-def test_q1_composition_verify(mu0, n):
-    gaps = SubsampledGaussianAccountant(mu0, 1.0, h=0.005).verify(n)
-    assert min(gaps.values()) > -1e-9                 # upper bound
-    assert max(gaps.values()) < 5e-3                  # and tight
-
-
 @pytest.mark.parametrize("mu0,n", [(0.15, 300), (0.30, 100), (0.80, 14)])
 def test_q1_composition_upper_bounds_analytic_gaussian(mu0, n):
-    """At q = 1 the composed truth is G_{mu0 sqrt(n)}. The accountant never falls below it."""
+    """At q = 1 the composed truth is G_{mu0 sqrt(n)}. The accountant bounds it from
+    above, and tightly."""
     acc = SubsampledGaussianAccountant(mu0, q=1.0, h=0.02)
     mu_eff = mu0 * math.sqrt(n)
     for e in np.linspace(0.3, 12.0, 60):
-        assert acc.delta(e, n) >= gaussian_profile(e, mu_eff) - 1e-12
+        gap = acc.delta(e, n) - gaussian_profile(e, mu_eff)
+        assert -1e-12 <= gap < 1e-3
 
 
 def test_degenerate_accountants():

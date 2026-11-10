@@ -193,25 +193,3 @@ def test_registry_holds_the_rules_and_their_kind():
     assert "fedavg" not in rule_names(stiefel=True) and not get_rule("fedavg").stiefel
     with pytest.raises(ValueError, match="unknown aggregation rule"):
         get_rule("nope")
-
-
-def test_a_registered_mean_is_a_full_rule(monkeypatch):
-    import rfl.federated.aggregation as A
-    monkeypatch.setattr(A, "AGGREGATION_RULES", dict(A.AGGREGATION_RULES))
-    seen = {}
-
-    def mean(Ws, weights, base):              # the polar factor of the mean: ProjAvg
-        seen["base"], seen["weights"] = base, weights
-        return polar_projection(sum(w * W for w, W in zip(weights, Ws)))
-
-    A.register_stiefel_mean("mymean", mean, "test")
-    with pytest.raises(ValueError, match="exists"):
-        A.register_stiefel_mean("mymean", mean)
-    Wt = _rand_stiefel(12, 5, seed=3)
-    csm, csd = _client_dicts(_clients_near(Wt, 3, 0.2, seed=30))
-    out = A.get_rule("mymean").aggregate(csm, csd, _TinySPDNet(Wt.float()), [1, 1, 2])
-    ref = projavg_aggregate(csm, csd, [1, 1, 2])
-    assert set(out) == set(ref)
-    for k in ref:
-        assert torch.allclose(out[k], ref[k], atol=1e-6), k
-    assert torch.allclose(seen["base"], Wt.float()) and abs(sum(seen["weights"]) - 1) < 1e-12

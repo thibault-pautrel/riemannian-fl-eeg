@@ -49,8 +49,8 @@ def setup_training(
     config: Any,  # ExperimentConfig
     device: torch.device,
     is_spdnet: bool = False
-) -> Tuple[Optimizer, Any]:
-    """Build the Adam optimiser. The learning rate is set per epoch by `train_model`.
+) -> Optimizer:
+    """Build the optimiser. The learning rate is set per epoch by `train_model`.
 
     Args:
         model: Model to train.
@@ -60,7 +60,7 @@ def setup_training(
         is_spdnet: Whether the model is an SPDNet.
 
     Returns:
-        (optimizer, None). The second element is kept for API compatibility.
+        The optimiser.
 
     Raises:
         ValueError: If lr_schedule is not 'none', 'cosine', 'step' or 'plateau'.
@@ -83,17 +83,7 @@ def setup_training(
     # the function the federated server uses for its rounds.
     logger.info(f"LR schedule: {schedule} from {lr:g} (floor {config.lr_min:g}, "
           f"{config.epochs} epochs)")
-    return optimizer, None
-
-
-def epoch_lr(base_lr: float, epoch: int, total_epochs: int, lr_min: float) -> float:
-    """Cosine learning rate of epoch `epoch` (1-indexed), as in rfl/utils/schedules.py.
-
-    lr = lr_min + (base_lr - lr_min) (1 + cos(pi t)) / 2 with
-    t = (epoch - 1) / (total_epochs - 1), so the first epoch runs at base_lr and the
-    last at lr_min.
-    """
-    return compute_round_lr(base_lr, epoch, total_epochs, 'cosine', lr_min)
+    return optimizer
 
 
 def train_epoch(
@@ -211,7 +201,7 @@ def train_model(
         fix_batch_norm_dtype(model, device)
         logger.info(f"SPDNet BatchNorm buffers fixed to {device}")
 
-    optimizer, scheduler = setup_training(
+    optimizer = setup_training(
         model, config, device, is_spdnet
     )
 
@@ -419,5 +409,3 @@ def train_model(
         'stopped_early': bool(early_stopping_patience > 0
                               and patience_counter >= early_stopping_patience),
     }
-
-

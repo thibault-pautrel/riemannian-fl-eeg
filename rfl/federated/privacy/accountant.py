@@ -143,13 +143,6 @@ def gaussian_profile(eps: float, mu: float) -> float:
 # --------------------------------------------------------------------------- #
 #  Closed-form per-step privacy profile of C_q(G_mu0)
 # --------------------------------------------------------------------------- #
-def _f_q(alpha: np.ndarray, mu0: float, q: float) -> np.ndarray:
-    """f_q(alpha) = q * G_mu0(alpha) + (1 - q) * (1 - alpha), reference form for tests.
-
-    Uses norm.isf(alpha), which stays accurate for alpha < 1e-16 where
-    Phi^{-1}(1.0 - alpha) would round to +inf.
-    """
-    return q * _PHI(_ISF(alpha) - mu0) + (1.0 - q) * (1.0 - alpha)
 
 
 def _u_star(c: np.ndarray, mu0: float, q: float) -> np.ndarray:
@@ -448,10 +441,8 @@ class SubsampledGaussianAccountant:
             raise ValueError("mu0 must be >= 0")
         self.mu0 = float(mu0)
         self.q = float(q)
-        self.h_requested = float(h)
         self.h = _effective_h(self.mu0, float(h))   # tied to the scale of the loss
         self._adaptive = bool(adaptive)
-        self._grid_tail = float(grid_tail)
 
         if self._adaptive and (eps_lo is None or eps_hi is None):
             lo, hi = _adaptive_grid_bounds(self.mu0, self.q, self.h,
@@ -607,26 +598,6 @@ class SubsampledGaussianAccountant:
             "total_mass": float(pld.total),
             "support": int(pld.mass.size),
         }
-
-    def verify(self, n_steps: int, eps_grid=(0.5, 1.0, 2.0, 5.0)) -> Dict[str, float]:
-        """Compare with the analytic identity G_mu0^{otimes n} = G_{mu0 sqrt(n)} at q = 1.
-
-        Returns:
-            {"eps=<e>": accountant delta minus analytic delta}. Each gap should be
-            non-negative (upper bound) and small.
-
-        Raises:
-            ValueError: if q != 1.
-        """
-        if abs(self.q - 1.0) > 1e-12:
-            raise ValueError("verify() is the q == 1 analytic check; got q=%r" % self.q)
-        mu_c = self.mu0 * math.sqrt(n_steps)
-        out = {}
-        for e in eps_grid:
-            got = self.delta(e, n_steps)
-            ref = gaussian_profile(e, mu_c)
-            out[f"eps={e}"] = got - ref         # >= 0 (upper bound), small
-        return out
 
 
 # --------------------------------------------------------------------------- #

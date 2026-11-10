@@ -181,10 +181,6 @@ class EEGNet(nn.Module):
     def norm_separable(self) -> nn.Module:
         return getattr(self, self._norm_separable_attr)
 
-    def norm_module_names(self) -> tuple:
-        """The three normalisation attribute names, in forward order."""
-        return (self._norm_temporal_attr, self._norm_spatial_attr,
-                self._norm_separable_attr)
 
     def _initialize_weights(self):
         """Xavier-uniform conv weights, norm affine at (1, 0)."""

@@ -170,9 +170,6 @@ def add_reduction_args(p: argparse.ArgumentParser) -> None:
                         "keep all their trials (heterogeneous scenario). 0: every subject.")
 
 
-REDUCTION_FLAGS = ("calibration_val_fraction", "calibration_order", "reduced_subjects")
-
-
 def reduction_config(args) -> dict:
     """The data-quantity fields of the configuration, from parsed arguments."""
     return dict(train_trials_per_class=args.train_trials_per_class,

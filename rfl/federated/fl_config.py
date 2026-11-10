@@ -428,42 +428,6 @@ class FLConfig(ExperimentConfig):
         return hashlib.md5(
             json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[:8]
 
-    def print_fl_summary(self):
-        """Print the federated and DP settings."""
-        logger.info("\n" + "-" * 70)
-        logger.info("Federated learning:")
-        logger.info(f"  Subjects per client:  {self.fl_subjects_per_client}")
-        logger.info(f"  Client partition:     {self.fl_client_partition}")
-        logger.info(f"  Rounds:               {self.fl_rounds}")
-        logger.info(f"  Local epochs:         {self.fl_local_epochs}")
-        logger.info(f"  Client fraction:      {self.fl_client_fraction} "
-              f"(no privacy amplification: participation is observable)")
-        logger.info(f"  Aggregation:          {self.fl_aggregation}"
-              f"{' (uniform)' if not self.fl_weight_by_samples else ' (sample-weighted)'}")
-        logger.info(f"  Personalisation:      {self.personalisation_name()}")
-        if self.fl_local_fc:
-            logger.info(f"  Local head:           {self.fl_local_head_mode}"
-                  + (" (inside the privatised gradient)"
-                     if self.dp_enabled and self.fl_local_head_mode == 'train' else ""))
-        if self.head_refit_enabled:
-            logger.info(f"  Head re-fit:          epochs {self.fl_head_refit_epochs}, "
-                  f"weight decays {self.fl_head_refit_weight_decays}, "
-                  f"selection {self.fl_head_refit_selection}")
-        has_norm = ((self.model_type.lower() == 'eegnet' and self.eegnet_norm_type == 'batch')
-                    or (self.model_type.lower() == 'spdnet' and self.spdnet_use_batch_norm))
-        if has_norm:
-            logger.info(f"  Normalisation:        {'local (FedBN)' if self.fl_fedbn else 'shared (averaged)'}")
-        logger.info(f"  LR schedule:          {self.lr_schedule}"
-              + (f" (lr_min={self.lr_min})" if self.lr_schedule == 'cosine' else ""))
-        logger.info(f"  Split:                {1 - self.val_size - self.test_size:.2f}/"
-              f"{self.val_size}/{self.test_size} (shared with centralized)")
-        if self.dp_enabled:
-            logger.info("\nDifferential privacy (record-level, substitution adjacency):")
-            logger.info(f"  Target:               (eps={self.dp_target_eps}, "
-                  f"delta={self.dp_target_delta:.0e})")
-            logger.info(f"  Clip C:               {self.dp_clip_C} (fixed a priori)")
-        logger.info("-" * 70)
-
 
 def create_client_subject_mapping(
     subjects: List[int],

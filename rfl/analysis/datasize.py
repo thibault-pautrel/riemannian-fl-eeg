@@ -1,7 +1,7 @@
 """Accuracy against the number of calibration trials: table and figure.
 
 Reads the final runs of the data-quantity plans (mi_datasize, mi_datasize_eegnet,
-mi_datasize_tslr, synth_datasize) and plots, for each scenario, the test accuracy of
+mi_datasize_tslr) and plots, for each scenario, the test accuracy of
 every arm against N (calibration trials per class and subject, log scale):
 
     U   every subject has N trials: mean accuracy over the subjects

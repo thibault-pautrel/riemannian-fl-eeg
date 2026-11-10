@@ -112,25 +112,3 @@ def client_trial_counts(dataset: str, subjects: List[int], subjects_per_client: 
     keep = set(task_events(dataset, task))
     return [sum(c for s in group for e, c in trials[str(s)].items() if e in keep)
             for group in create_client_subject_mapping(list(subjects), subjects_per_client)]
-
-
-def client_train_sizes(dataset: str, subjects: List[int], subjects_per_client: int,
-                       task: str, train_fraction: float) -> Optional[List[int]]:
-    """Expected training-set size of each client, or None without statistics.
-
-    The split is stratified over all trials, not per client, so the actual size of a
-    client varies around this value from seed to seed (binomial spread).
-    """
-    st = load_stats(dataset)
-    if not st:
-        return None
-    trials = st.get("trials", {})
-    if any(str(s) not in trials for s in subjects):
-        return None
-    from rfl.federated.fl_config import create_client_subject_mapping
-    keep = set(task_events(dataset, task))
-    sizes = []
-    for group in create_client_subject_mapping(list(subjects), subjects_per_client):
-        n = sum(c for s in group for e, c in trials[str(s)].items() if e in keep)
-        sizes.append(int(train_fraction * n))
-    return sizes

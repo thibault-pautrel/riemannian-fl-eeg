@@ -152,9 +152,6 @@ class FLServer:
     # ------------------------------------------------------------------ #
     #  Global state
     # ------------------------------------------------------------------ #
-    def get_global_state(self) -> Dict[str, torch.Tensor]:
-        """Return a deep copy of the global state dict."""
-        return copy.deepcopy(self.global_state_dict)
 
     # In local-only mode the schedule and the stopping rule are per client. A pooled
     # rule would let other clients' validation data decide when a client stops.
@@ -731,15 +728,6 @@ class FLServer:
         }, path)
         logger.info(f"[Server] Global model saved to: {path} "
               f"(selected round {self.best_round})")
-
-    def load_global_model(self, path: str):
-        """Load the last-round state (and the history) saved by `save_global_model`."""
-        ckpt = torch.load(path, map_location=self.device)
-        self.global_state_dict = ckpt['model_state_dict']
-        self.global_model.load_state_dict(self.global_state_dict)
-        if 'round_history' in ckpt:
-            self.round_history = ckpt['round_history']
-        logger.info(f"[Server] Global model loaded from: {path}")
 
 
 # =========================================================================== #

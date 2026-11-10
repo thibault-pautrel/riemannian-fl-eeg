@@ -327,20 +327,24 @@ def test_client_partition_is_refused_on_synthetic_data(tmp_path):
     assert "--client-partition" in err.getvalue()
 
 
-def test_a_registered_mean_runs_end_to_end(monkeypatch):
+def test_a_new_rule_runs_end_to_end(monkeypatch):
+    """A rule added to AGGREGATION_RULES is used by the server and --aggregation."""
     import rfl.federated.aggregation as A
     monkeypatch.setattr(A, "AGGREGATION_RULES", dict(A.AGGREGATION_RULES))
     calls = []
 
-    def mean(Ws, weights, base):
-        calls.append(len(Ws))
-        return A.polar_projection(sum(w * W for w, W in zip(weights, Ws)))
+    def myrule_aggregate(client_stiefel_matrices, client_state_dicts, global_model,
+                         weights=None, fedbn=True):
+        calls.append(len(client_stiefel_matrices))
+        return A.projavg_aggregate(client_stiefel_matrices, client_state_dicts, weights,
+                                   fedbn=fedbn)
 
-    A.register_stiefel_mean("mymean", mean)
-    cfg = _cfg("spdnet", fl_aggregation="mymean", learning_rate=1e-3, lr_schedule="none")
+    A.AGGREGATION_RULES["myrule"] = A.AggregationRule(
+        lambda S, sds, g, w=None, fedbn=True: myrule_aggregate(S, sds, g, w, fedbn=fedbn))
+    cfg = _cfg("spdnet", fl_aggregation="myrule", learning_rate=1e-3, lr_schedule="none")
     clients, server = _federation(cfg)
     _run(server, clients, 2)
     assert calls and set(calls) == {3}
     assert _ortho_err(server.global_state_dict["bimap.weight"]) < 1e-4
     with pytest.raises(ValueError, match="EEGNet"):
-        _cfg("eegnet", fl_aggregation="mymean")
+        _cfg("eegnet", fl_aggregation="myrule")

@@ -121,7 +121,7 @@ class Evaluator:
 
         accuracy = (preds_np == labels_np).mean()
 
-        precision, recall, f1, support = precision_recall_fscore_support(
+        precision, recall, f1, _ = precision_recall_fscore_support(
             labels_np, preds_np, average=average, zero_division=0
         )
         per_class_precision, per_class_recall, per_class_f1, per_class_support = \
