@@ -1,6 +1,6 @@
 """Step 1 of the batch-norm study: calibrate the dataset-level settings, centrally.
 
-The protocol of the study (docs/options.md, SPD batch norm, Study):
+The protocol of the study:
 
 0. ReEig floors (`analyze_covariances --architectures`, no training). For every
    candidate architecture, with and without batch norm, and every percentile q, each

@@ -5,7 +5,7 @@
   1. m_star = min_i m_i and m_max = max_i m_i, the smallest and largest client
      training-set sizes. The guarantee is stated for a given train/validation/test
      split: the split is stratified over all trials, so it depends on every label, and
-     the sizes are fixed once it is drawn (docs/design.md, Limitations).
+     the sizes are fixed once it is drawn (docs/options.md, Differential privacy).
   2. q = B / m_star, the largest subsampling rate any record faces.
   3. n = T * tau with tau = local_epochs * ceil(m_max / B), the largest number of steps
      any record is composed over. Each client actually runs local_epochs * floor(m_i / B)

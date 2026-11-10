@@ -311,7 +311,7 @@ class FLConfig(ExperimentConfig):
         if driven:
             warnings.warn(
                 f"dp_enabled with {', '.join(driven)}: the validation records drive the "
-                "training, and the guarantee does not cover them (docs/design.md, Limitations).",
+                "training, and the guarantee does not cover them (docs/options.md, Differential privacy).",
                 stacklevel=3)
 
         # Settings where DP protects less than the transcript. They are valid, and kept

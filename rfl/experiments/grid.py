@@ -25,7 +25,7 @@ command line, so an invalid option fails before any job starts. Results go under
 `$RFL_RESULTS/<NAME>/<stage>/`, where NAME is the plan's `NAME` attribute (default: the
 module name) and RFL_RESULTS defaults to `./results`.
 
-Selection (`--select`) implements the protocol of docs/cluster.md: for each arm, the swept
+Selection (`--select`) implements the protocol of docs/options.md: for each arm, the swept
 values with the best mean over the seeds of the stage of the validation metric at the
 reported (last) round. It refuses to run while jobs of the stage are unfinished. It
 writes `$RFL_RESULTS/<NAME>/<stage>/selection.json`, which a later stage reads with

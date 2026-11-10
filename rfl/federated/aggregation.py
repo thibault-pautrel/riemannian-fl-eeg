@@ -27,6 +27,8 @@ with `register_stiefel_mean("mymean", mean)`, it is applied to every BiMap weigh
 other parameters are averaged as above, FedBN and FedPer are unchanged, and the runs
 take `--aggregation mymean`. Differential privacy is unaffected: the clients privatise
 their updates and the server rule is post-processing.
+`test_a_registered_mean_is_a_full_rule` (tests/test_aggregation.py) shows a mean
+registered and checked against ProjAvg.
 
 All non-Stiefel parameters (classifier, convolutions) are averaged in Euclidean space
 under every rule.
