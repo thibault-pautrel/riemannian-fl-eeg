@@ -71,9 +71,9 @@ def arch_name(arch: str) -> str:
 EXTEND = {
     "lr": {"factor": 3, "min": 1e-4, "max": 3.0},
     "batch_size": {"factor": 2, "int": True, "min": 8, "max": SETTINGS["batch_max"]},
-    # No practical cap: an arm still improving at its longest horizon gets a longer one.
-    # (A cap of 1000 stopped four arms of BNCI2014_001 at 675 rounds, still improving.)
-    "horizon": {"factor": 1.5, "int": True, "max": 20000, "down": False},
+    # Budget of 3000 rounds: from 200, the grid stops at 2277 = 200 x 1.5^6. An arm still
+    # at its longest horizon there is reported at the bound (selection.json, "at_bound").
+    "horizon": {"factor": 1.5, "int": True, "max": 3000, "down": False},
     "--bn-momentum": {"factor": 3, "min": 1e-3, "max": 0.9},
     "--reeig-percentile": {"values": list(PERCENTILES)},
 }

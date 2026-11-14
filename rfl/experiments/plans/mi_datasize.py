@@ -57,7 +57,7 @@ N_CLASSES = DATASET_CONFIGS[DATASET]["n_classes"]
 SCENARIOS = scenarios(SETTINGS_DS["ns"], SETTINGS_DS["hetero"], K_REDUCED)
 NAME = f"mi_{DATASET}_datasize"
 
-# The horizon rule of the calibration (no practical cap), the batch down to 2.
+# The horizon rule of the calibration (at most 3000 rounds), the batch down to 2.
 EXTEND = extend_rules({**_EXTEND,
                        "batch_size": {"factor": 2, "int": True, "min": 2,
                                       "max": SETTINGS["batch_max"]}},

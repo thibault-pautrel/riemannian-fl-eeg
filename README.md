@@ -69,7 +69,8 @@ Details in [docs/options.md](docs/options.md).
 
 A study is a plan in `rfl/experiments/plans/`. Its docstring gives the protocol. The
 pipeline tunes every arm (learning rate x batch size, then horizon, on 3 seeds, grids
-extended at their edges) and runs the final arms on 10 seeds.
+extended at their edges, horizon at most 3000 rounds) and runs the final arms on 10
+seeds.
 
 | Plan | Question |
 |---|---|
