@@ -800,11 +800,10 @@ def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasiz
 
     s1 = G.plan_jobs("mi_datasize", "sweep1", check=True)
     arms = {j.arm for j in s1}
-    assert len(arms) == 64 and len(s1) == 64 * 12 * 3
-    assert "fed_spdnet_projavg_fedper_bnshared_H5" in arms
+    assert len(arms) == 40 and len(s1) == 40 * 12 * 3
+    assert not any("_H" in a for a in arms)                  # U and full only
     assert "fed_spdnet_local_bnshared_U5" not in arms
     assert {j.batch_size for j in s1 if j.arm.endswith("_U5")} == {4, 8, 16}
-    assert {j.batch_size for j in s1 if j.arm.endswith("_H5")} == {32, 64, 128}
     for j in s1:
         fake(j, 0.5 + 0.1 * (j.lr == 0.1) + 0.05 * (j.batch_size in (8, 64)))
     assert G.main(["mi_datasize", "--stage", "sweep1", "--select"]) == 0
@@ -817,20 +816,20 @@ def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasiz
         fake(j, 0.6)
     assert G.main(["mi_datasize", "--stage", "sweep2", "--select"]) == 0
     final = G.plan_jobs("mi_datasize", "final")
-    assert len(final) == 640
+    assert len(final) == 400
     for j in final:
         ns = _parse(j)
         bn = "_bn_" in j.arm or "_bnshared_" in j.arm
         assert ns.use_batch_norm == bn and ns.bn_recalibrate == bn
         assert ns.optimizer == "sgd" and ns.reeig_percentile == 5
         assert (ns.train_trials_per_class is None) == j.arm.endswith("_full")
-        assert ns.reduced_subjects == (3 if "_H" in j.arm else 0)
+        assert ns.reduced_subjects == 0
         assert bool(ns.head_refit_epochs) == ("_shared_" in j.arm)
     eeg = G.plan_jobs("mi_datasize_eegnet", "sweep1", check=True)
-    assert len({j.arm for j in eeg}) == 64 and {j.lr for j in eeg} == {1e-2, 3e-2, 1e-1, 3e-1}
+    assert len({j.arm for j in eeg}) == 40 and {j.lr for j in eeg} == {1e-2, 3e-2, 1e-1, 3e-1}
     assert all("--optimizer" in j.args and "sgd" in j.args for j in eeg)
     ts = G.plan_jobs("mi_datasize_tslr", "final", check=True)
-    assert len(ts) == 8 * 2 * 10 and {j.entry for j in ts} == {"tslr"}
+    assert len(ts) == 5 * 2 * 10 and {j.entry for j in ts} == {"tslr"}
 
 
 def test_log_filter_drops_a_tensor_printed_after_a_progress_bar():

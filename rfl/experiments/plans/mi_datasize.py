@@ -1,9 +1,11 @@
 """Data quantity: when does federated training beat local training? SPDNet arms.
 
 The question: with N calibration trials per class and subject, from which N does a
-subject gain by joining a federation? Two scenarios (rfl/experiments/datasize.py):
-U<N> every subject has N trials per class, H<N> a third of the subjects has N and the
-others all their trials. The test trials are the same for every N.
+subject gain by joining a federation? The scenarios (rfl/experiments/datasize.py):
+U<N>, every subject has N trials per class, and full, no reduction. The test trials are
+the same for every N. The heterogeneous scenarios H<N> (a third of the subjects reduced)
+are set aside: their reduced subjects, drawn at random per seed, cover the subjects
+unevenly.
 
 Arms, for each scenario: every combination of head (shared, shared + re-fit, personal
 FedPer, local) and normalisation (none, SPD batch norm kept on each client = FedBN,
@@ -42,13 +44,13 @@ from rfl.experiments.protocol import Protocol
 DATASET = os.environ.get("RFL_DATASET", "BNCI2014_001")
 
 # Per dataset: N values of the uniform scenario (below the calibration pool of a
-# subject, about 0.75 x trials per class) and of the heterogeneous one.
+# subject, about 0.75 x trials per class). No heterogeneous scenario (docstring).
 DATASIZE = {
-    "BNCI2014_001": {"ns": [5, 10, 20, 40], "hetero": [5, 10, 20]},
-    "Weibo2014": {"ns": [5, 10, 20, 40], "hetero": [5, 10, 20]},
-    "Cho2017": {"ns": [5, 10, 20, 40], "hetero": [5, 10, 20]},
-    "PhysionetMI": {"ns": [3, 5, 10], "hetero": [3, 5]},
-    "Schirrmeister2017": {"ns": [5, 10, 20, 40], "hetero": [5, 10, 20]},
+    "BNCI2014_001": {"ns": [5, 10, 20, 40], "hetero": []},
+    "Weibo2014": {"ns": [5, 10, 20, 40], "hetero": []},
+    "Cho2017": {"ns": [5, 10, 20, 40], "hetero": []},
+    "PhysionetMI": {"ns": [3, 5, 10], "hetero": []},
+    "Schirrmeister2017": {"ns": [5, 10, 20, 40], "hetero": []},
 }
 SETTINGS_DS = DATASIZE[DATASET]
 N_SUBJECTS = len(DATASET_CONFIGS[DATASET]["subjects"])
