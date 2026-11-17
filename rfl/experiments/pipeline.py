@@ -149,6 +149,9 @@ def advance(plan: str, stage: str, metric: str = "val_acc", check: bool = False,
     if todo or stage == "final":
         return todo
     sel = write_selection(plan, jobs, metric, verbose=verbose)
+    for j in jobs:                  # a tuning run is only read for its scores
+        for f in j.save_dir.glob("*.pt"):
+            f.unlink()
     rules = plan_attr(plan, "EXTEND", {})
     added = extend_grids(plan_namespace(plan), stage, jobs, sel, rules) if rules else {}
     if not added:

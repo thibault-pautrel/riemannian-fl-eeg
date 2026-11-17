@@ -435,7 +435,7 @@ class FLServer:
             # or a batch forward fails (dp_client.py, dp_grad.py).
             if 'dp_local_steps' not in metrics:
                 checked_losses.append(metrics['train_loss'])
-            if verbose:
+            if verbose and len(participants) <= 10:      # short logs with many clients
                 logger.info(f"  [Client {client.client_id}] train loss={metrics['train_loss']:.4f} "
                       f"acc={metrics['train_acc']:.4f}")
 

@@ -69,7 +69,8 @@ def arch_name(arch: str) -> str:
 # only grows: a short horizon at which the validation accuracy has stopped improving is
 # the converged choice.
 EXTEND = {
-    "lr": {"factor": 3, "min": 1e-4, "max": 3.0},
+    # SGD diverges on some seeds beyond 1 (BNCI2014_001 was tuned with a bound of 3).
+    "lr": {"factor": 3, "min": 1e-4, "max": 1.0},
     "batch_size": {"factor": 2, "int": True, "min": 8, "max": SETTINGS["batch_max"]},
     # Budget of 3000 rounds: from 200, the grid stops at 2277 = 200 x 1.5^6. An arm still
     # at its longest horizon there is reported at the bound (selection.json, "at_bound").

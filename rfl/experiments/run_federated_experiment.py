@@ -382,7 +382,9 @@ def run_federated_experiment(
                                >= config.fl_rounds),
             **sel_metrics,
         },
-        "round_history": server.round_history,
+        # The per-client curves stay in memory: with 100 clients, megabytes per run.
+        "round_history": {k: v for k, v in server.round_history.items()
+                          if not k.startswith("per_client_")},
     }
 
     with open(os.path.join(save_dir, "fl_results.json"), "w") as f:

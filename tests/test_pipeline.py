@@ -94,7 +94,9 @@ def test_advance_extends_an_edge_until_the_choice_is_inside(root, auto_plan):
         passes += 1
         for j in todo:
             _fake_any(j, score[j.lr])
+            (j.save_dir / "global_model_final.pt").write_bytes(b"")
     assert passes == 3                              # grid, + 0.9, + 2.7
+    assert not list(G.results_root().rglob("*.pt"))   # tuning models are dropped
     sel = json.loads(G.selection_path("auto", "sweep").read_text())
     assert sel["central_spdnet"]["hp"]["lr"] == 0.9
     ext = json.loads(G.extensions_path("auto", "sweep").read_text())
