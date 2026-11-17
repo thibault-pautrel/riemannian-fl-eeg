@@ -14,7 +14,12 @@ The protocol of the study:
    the running mean. The best architecture is then kept, with and without batch norm
    (Schirrmeister2017: four two-block candidates; the other datasets keep one block).
 2. Study (mi_spdnet_bn). Every arm, centralised or federated, personalised or not, gets
-   the same tuning (learning rate x batch size, then horizon) with these settings fixed.
+   the same tuning (learning rate x batch size) with these settings fixed.
+
+Every run trains to convergence (SCHEDULE): plain SGD, the learning rate halved after 20
+rounds (epochs) without a lower validation loss, training stopped after 150, within a
+budget of 3000, and the model of the lowest validation loss reported. This is the rule
+of the personalised-FL paper (arXiv:2609.29037), with SGD in place of Adam.
 
 A grid edge extends by itself (EXTEND, rfl/experiments/pipeline.py). The whole study
 runs as one HTCondor DAG: `bash condor/submit_dag.sh mi_spdnet_bn` (see mi_spdnet_bn).
@@ -30,12 +35,16 @@ from rfl.experiments.protocol import Protocol, Variant
 
 DATASET = os.environ.get("RFL_DATASET", "BNCI2014_001")
 
-# Training of every arm, as in Gallet et al. (On batch normalization for SPDnet, 2027):
-# plain SGD, BiMap weights by the library's orthogonal parametrization.
-TRAINING = ("--optimizer", "sgd", "--stiefel", "trivialization")
+# Training to convergence (module docstring), for every arm of every study.
+SCHEDULE = ("--lr-schedule", "plateau", "--lr-plateau-patience", "20",
+            "--lr-plateau-factor", "0.5", "--early-stop-patience", "150",
+            "--selection-metric", "val_loss", "--report", "selected")
+BUDGET = [3000]                              # rounds or epochs, at most
+# As in Gallet et al. (On batch normalization for SPDnet, 2027): plain SGD, BiMap weights
+# by the library's orthogonal parametrization.
+TRAINING = ("--optimizer", "sgd", "--stiefel", "trivialization") + SCHEDULE
 BN = ("--use-batch-norm",)                   # GAH mean, FedBN (the defaults)
 LR = [1e-2, 3e-2, 1e-1, 3e-1]                # SGD (the paper used 0.01 to 0.5)
-HORIZON = [200, 100, 300]                    # rounds or epochs; 200 during stage 1
 MOMENTUM = [0.1, 0.01, 0.3]                  # running mean; 0.01: the library default
 QUANTILES = [15, 5, 30]                      # share (%) of eigenvalues each ReEig clamps
 SWEEP_SEEDS = (1, 2, 3)
@@ -65,16 +74,11 @@ def arch_name(arch: str) -> str:
     return "a" + arch.replace(",", "_")
 
 
-# One more value beyond a grid edge (rfl/experiments/grid.py:next_value). The horizon
-# only grows: a short horizon at which the validation accuracy has stopped improving is
-# the converged choice.
+# One more value beyond a grid edge (rfl/experiments/grid.py:next_value).
 EXTEND = {
     # SGD diverges on some seeds beyond 1 (BNCI2014_001 was tuned with a bound of 3).
     "lr": {"factor": 3, "min": 1e-4, "max": 1.0},
     "batch_size": {"factor": 2, "int": True, "min": 8, "max": SETTINGS["batch_max"]},
-    # Budget of 3000 rounds: from 200, the grid stops at 2277 = 200 x 1.5^6. An arm still
-    # at its longest horizon there is reported at the bound (selection.json, "at_bound").
-    "horizon": {"factor": 1.5, "int": True, "max": 3000, "down": False},
     "--bn-momentum": {"factor": 3, "min": 1e-3, "max": 0.9},
     "--reeig-percentile": {"values": list(PERCENTILES)},
 }
@@ -123,7 +127,7 @@ def calibration(dataset: str = DATASET) -> Protocol:
         kinds=("central",),
         model_args={"spdnet": TRAINING},
         variants=variants,
-        space={"nodp": {"lr": LR, "batch_size": st["batches"], "horizon": HORIZON[:1]},
+        space={"nodp": {"lr": LR, "batch_size": st["batches"], "horizon": BUDGET},
                "dp": {}},
         search="staged",
         stage_keys=[["lr", "batch_size"], ["--reeig-percentile", "--bn-momentum"]],

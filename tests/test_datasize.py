@@ -160,11 +160,8 @@ def test_scenarios_and_grids():
     sc = DS.scenarios([5, 20], [5], k_reduced=3)
     assert [s[0] for s in sc] == ["U5", "U20", "full", "H5"]
     assert sc[-1][1] == ["--train-trials-per-class", "5", "--reduced-subjects", "3"]
-    assert DS.horizon_grid([200, 100, 300], 10) == [400, 200, 600]
-    assert DS.horizon_grid([200], 5)[0] < 4 * 200 + 1
-    assert DS.horizon_grid([200], None) == [200]
     assert DS.batch_grid(5, 4) == [8, 4, 16]
-    v = DS.variants({"bn": (("--use-batch-norm",), None)}, sc, [10], [32], 4)
+    v = DS.variants({"bn": (("--use-batch-norm",), None)}, sc, [32], 4)
     assert set(v) == {"bn_U5", "bn_U20", "bn_full", "bn_H5"}
     assert v["bn_H5"].space["batch_size"] == [32]
     assert v["bn_U5"].space["batch_size"] == [8, 4, 16]
@@ -356,12 +353,12 @@ def test_study_dag_runs_four_chains_side_by_side(tmp_path, monkeypatch):
     from rfl.experiments import pipeline as PL
     monkeypatch.setenv("RFL_RESULTS", str(tmp_path))
     chains = PL.branches("mi_study")
-    assert [len(c) for c in chains] == [9, 3, 1, 5]
+    assert [len(c) for c in chains] == [7, 2, 1, 4]
     dag = PL.write_dag("mi_study", directory=tmp_path / "dag").read_text()
     parents = [ln for ln in dag.splitlines() if ln.startswith("PARENT")]
-    assert len(parents) == 8 + 2 + 4
-    assert not any("N8_" in p and "N9_" in p for p in parents)      # chains independent
-    assert not any("N12_" in p for p in parents)
+    assert len(parents) == 6 + 1 + 3
+    assert not any("N6_" in p and "N7_" in p for p in parents)      # chains independent
+    assert not any("N9_" in p for p in parents)
     assert "RFL_DAG=1" in (tmp_path / "dag" / "N3_mi_spdnet_bn_sweep1.sub").read_text()
 
 

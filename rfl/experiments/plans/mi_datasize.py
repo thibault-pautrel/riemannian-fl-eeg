@@ -15,8 +15,8 @@ the calibration of the batch-norm study (mi_spdnet_bn_calib, centralised, all da
 With few trials the running mean has few updates, so every batch-norm arm sets it
 exactly after training (--bn-recalibrate, rfl/models/bn_recalibration.py).
 
-Each arm is tuned on its own (learning rate x batch size, then horizon), on the
-validation accuracy of the reduced clients. Companion plans, same dataset:
+Each arm is tuned on its own (learning rate x batch size), on the validation accuracy
+of the reduced clients, and trains to convergence (mi_spdnet_bn_calib, SCHEDULE). Companion plans, same dataset:
 mi_datasize_eegnet (EEGNet arms) and mi_datasize_tslr (tangent space + logistic
 regression, local and pooled re-centred). The whole study is one DAG:
 
@@ -25,9 +25,8 @@ regression, local and pooled re-centred). The whole study is one DAG:
     python -m rfl.analysis.datasize $RFL_RESULTS/mi_BNCI2014_001_datasize*/final \\
         --out datasize_BNCI2014_001
 
-Cost per dataset (BNCI2014_001, 8 scenarios): 64 SPDNet arms x (36 + 9) sweep runs + 10
-final seeds, about 3,500 runs, plus the extensions. Trim NS and HETERO_NS below to go
-faster.
+Cost per dataset (BNCI2014_001, 5 scenarios): 40 SPDNet arms x (36 sweep runs + 10
+final seeds), 1,840 runs, plus the extensions. Trim DATASIZE below to go faster.
 """
 
 import os
@@ -37,7 +36,7 @@ from rfl.experiments.datasize import (ALL_KINDS, FEDERATED, SELECTION, extend_ru
                                       scenarios, variants)
 from rfl.experiments.pipeline import Command
 from rfl.experiments.plans.mi_spdnet_bn_calib import (
-    EXTEND as _EXTEND, FINAL_SEEDS, HORIZON, LR, SETTINGS, SWEEP_SEEDS, TRAINING,
+    EXTEND as _EXTEND, BUDGET, FINAL_SEEDS, LR, SETTINGS, SWEEP_SEEDS, TRAINING,
     floors_command, floors_ready)
 from rfl.experiments.protocol import Protocol
 
@@ -59,7 +58,7 @@ N_CLASSES = DATASET_CONFIGS[DATASET]["n_classes"]
 SCENARIOS = scenarios(SETTINGS_DS["ns"], SETTINGS_DS["hetero"], K_REDUCED)
 NAME = f"mi_{DATASET}_datasize"
 
-# The horizon rule of the calibration (at most 3000 rounds), the batch down to 2.
+# The rules of the calibration, the batch down to 2.
 EXTEND = extend_rules({**_EXTEND,
                        "batch_size": {"factor": 2, "int": True, "min": 2,
                                       "max": SETTINGS["batch_max"]}},
@@ -76,20 +75,18 @@ def study() -> Protocol:
     return Protocol(
         dataset=DATASET, models=("spdnet",), aggregations={"spdnet": ("projavg",)},
         model_args={"spdnet": TRAINING}, kinds=ALL_KINDS,
-        variants=variants(norms, SCENARIOS, HORIZON, SETTINGS["batches"], N_CLASSES),
-        space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": HORIZON},
+        variants=variants(norms, SCENARIOS, SETTINGS["batches"], N_CLASSES),
+        space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": BUDGET},
                "dp": {}},
-        search="staged", stage_keys=[["lr", "batch_size"], ["horizon"]],
+        search="staged", stage_keys=[["lr", "batch_size"]],
         sweep_seeds=SWEEP_SEEDS, final_seeds=FINAL_SEEDS, name=NAME)
 
 
-STAGES = {"sweep1": lambda: study().sweep(0), "sweep2": lambda: study().sweep(1),
-          "final": lambda: study().final()}
+STAGES = {"sweep1": lambda: study().sweep(0), "final": lambda: study().final()}
 PIPELINE = [
     Command("floors", floors_command(), done=floors_ready),
     ("mi_spdnet_bn_calib", "sweep1"), ("mi_spdnet_bn_calib", "sweep2"),
-    ("mi_datasize", "sweep1"), ("mi_datasize", "sweep2"), ("mi_datasize", "final"),
-    ("mi_datasize_eegnet", "sweep1"), ("mi_datasize_eegnet", "sweep2"),
-    ("mi_datasize_eegnet", "final"),
+    ("mi_datasize", "sweep1"), ("mi_datasize", "final"),
+    ("mi_datasize_eegnet", "sweep1"), ("mi_datasize_eegnet", "final"),
     ("mi_datasize_tslr", "final"),
 ]

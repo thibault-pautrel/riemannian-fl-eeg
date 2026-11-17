@@ -68,9 +68,10 @@ Details in [docs/options.md](docs/options.md).
 ## Reproducing the studies
 
 A study is a plan in `rfl/experiments/plans/`. Its docstring gives the protocol. The
-pipeline tunes every arm (learning rate x batch size, then horizon, on 3 seeds, grids
-extended at their edges, horizon at most 3000 rounds) and runs the final arms on 10
-seeds.
+pipeline tunes every arm (learning rate x batch size on 3 seeds, grids extended at their
+edges) and runs the final arms on 10 seeds. Every run trains to convergence: the learning
+rate halves after 20 rounds without a lower validation loss, training stops after 150,
+within 3000 rounds, and the model of the lowest validation loss is reported.
 
 | Plan | Question |
 |---|---|

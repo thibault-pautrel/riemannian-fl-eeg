@@ -231,13 +231,17 @@ def client_table(det: pd.DataFrame, model: str) -> Optional[List[str]]:
     return lines
 
 
-def _log_points(curve: np.ndarray, n: int = 150) -> np.ndarray:
-    """About `n` indices of `curve`, evenly spaced on a log scale of the round."""
-    return np.unique(np.geomspace(1, len(curve), n).astype(int)) - 1
+def _points(length: int, n: int = 200) -> np.ndarray:
+    """At most `n` evenly spaced indices of a curve of `length` rounds, the last included."""
+    return np.unique(np.linspace(0, length - 1, min(n, length)).round().astype(int))
 
 
 def bn_rounds(df: pd.DataFrame, path: Path) -> bool:
-    """Client mean test accuracy against the round, one panel per network."""
+    """Client mean test accuracy against the round, one panel per network.
+
+    A seed that stopped early keeps its last value up to the longest seed of its arm, so
+    each curve runs until the last seed stops and ends on its plateau.
+    """
     fed = df[(df.kind == "federated") & (df.clients == "subject")]
     panels, used = [], set()
     for m in [m for m in MODELS if m in set(fed.model)]:
@@ -251,9 +255,10 @@ def bn_rounds(df: pd.DataFrame, path: Path) -> bool:
                     curves.append(np.asarray(h, float))
             if not curves:
                 continue
-            n = min(len(c) for c in curves)
-            mean = 100 * np.mean([c[:n] for c in curves], axis=0)
-            idx = _log_points(mean)
+            n = max(len(c) for c in curves)
+            mean = 100 * np.mean([np.pad(c, (0, n - len(c)), mode="edge") for c in curves],
+                                 axis=0)
+            idx = _points(n)
             head, norm = scope.replace("+refit", ""), norm_of(arch)
             dash, _ = NORM_LINE[norm]
             series.append({"style": f"{HEAD_COLOUR[head]}, thick, {dash}",
@@ -262,10 +267,12 @@ def bn_rounds(df: pd.DataFrame, path: Path) -> bool:
             top = max(top, n)
         if series:
             ys = [y for s in series for y in s["y"]]
-            ticks = [t for t in (1, 10, 100, 1000) if t <= top]
+            step = 10 ** math.floor(math.log10(top)) / (2 if top < 2.5 * 10 ** math.floor(
+                math.log10(top)) else 1)
+            ticks = [int(step * k) for k in range(int(top // step) + 1)]
             panels.append({"title": MODELS[m], "xlabel": "communication round",
                            "ylabel": "test accuracy (\\%)", "xticks": ticks,
-                           "xmin": 1, "xmax": top, "ylog": False,
+                           "xmin": 0, "xmax": top, "xlog": False, "ylog": False,
                            "ymin": math.floor(min(ys) / 5) * 5,
                            "ymax": math.ceil(max(ys) / 5) * 5, "series": series})
     if not panels:
@@ -390,7 +397,8 @@ CAPTIONS = {
     "tab_bn_clients_eegnet": "Batch-norm study, EEGNet, subject clients: test accuracy of "
                              "each subject (\\%). Best mean of each row in bold.",
     "fig_bn_rounds": "Batch-norm study, subject clients: client mean test accuracy against "
-                     "the communication round, mean over the seeds.",
+                     "the communication round, mean over the seeds. A seed that stopped "
+                     "keeps its last value.",
     "tab_datasize": "Data quantity (every subject has $N$ trials per class): client mean "
                     "test accuracy (\\%). Best mean of each column and block in bold.",
     "fig_datasize": "Data quantity: client mean test accuracy against $N$, mean and "

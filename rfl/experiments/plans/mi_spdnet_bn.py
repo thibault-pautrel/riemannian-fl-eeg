@@ -11,16 +11,15 @@ plus a centralised reference with and without batch norm: 18 arms. The IID clien
 the control: FedBN and a shared batch norm should then give the same result. The batch
 norm uses the GAH mean. DP refuses the layer, so the study is non-private. Every arm
 trains with plain SGD and the library's orthogonal parametrization of the BiMap weights,
-and the federated arms aggregate with ProjAvg.
+to convergence (mi_spdnet_bn_calib, SCHEDULE), and the federated arms aggregate with
+ProjAvg.
 
 One protocol for every arm:
 
     floors        analyze_covariances --architectures (mi_spdnet_bn_calib)
     calibration   mi_spdnet_bn_calib: architecture, ReEig percentile and momentum of the
                   running mean, chosen on the centralised SPDNet, then fixed
-    sweep1        learning rate x batch size, 12 cells x 3 seeds, horizon 200
-    sweep2        horizon (200, 100, 300) at the stage-1 choice: the shortest horizon
-                  within one standard error of the best, so that the runs converge
+    sweep1        learning rate x batch size, 12 cells x 3 seeds
     final         the selected values on 10 seeds, the same splits for every arm
 
 A choice on the edge of its grid extends the grid by itself (EXTEND), and the whole
@@ -34,7 +33,7 @@ study runs as one HTCondor DAG (PIPELINE below, rfl/experiments/pipeline.py):
     python -m rfl.analysis.stats $RFL_RESULTS/mi_BNCI2014_001_bn/final \\
         --factor arch --by kind clients scope
 
-Runs per dataset: 648 + 162 + 180, plus the extensions.
+Runs per dataset: 648 + 180, plus the extensions.
 
 Arms, named <arm kind>_<variant>:
 
@@ -51,7 +50,7 @@ from typing import Tuple
 from rfl.experiments.pipeline import Command
 from rfl.experiments.plans.mi_spdnet_bn_calib import EXTEND as _EXTEND
 from rfl.experiments.plans.mi_spdnet_bn_calib import (
-    BN, DATASET, FINAL_SEEDS, HORIZON, LR, SETTINGS, SWEEP_SEEDS, TRAINING,
+    BN, BUDGET, DATASET, FINAL_SEEDS, LR, SETTINGS, SWEEP_SEEDS, TRAINING,
     arch_args, arch_name, calibration, floors_command, floors_ready)
 from rfl.experiments.protocol import Protocol, Variant
 
@@ -100,10 +99,10 @@ def study() -> Protocol:
             "iid_bn": Variant(args=IID + bn, kinds=WITH_CLIENTS),
             "iid_bnshared": Variant(args=IID + shared_bn, kinds=FEDERATED),
         },
-        space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": HORIZON},
+        space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": BUDGET},
                "dp": {}},
         search="staged",
-        stage_keys=[["lr", "batch_size"], ["horizon"]],
+        stage_keys=[["lr", "batch_size"]],
         sweep_seeds=SWEEP_SEEDS,
         final_seeds=FINAL_SEEDS,
         name=NAME,
@@ -111,19 +110,14 @@ def study() -> Protocol:
 
 
 STAGES = {"sweep1": lambda: study().sweep(0),
-          "sweep2": lambda: study().sweep(1),
           "final": lambda: study().final()}
 
 # Grid extensions, the same rules as the calibration (rfl/experiments/pipeline.py).
 EXTEND = _EXTEND
 
-# The horizon is the shortest one whose validation accuracy is within one standard
-# error of the best (rfl/experiments/grid.py:select).
-SELECTION = {"prefer_smaller": ["horizon"]}
-
 # Every step of the study, for rfl/experiments/pipeline.py and condor/submit_dag.sh.
 PIPELINE = [
     Command("floors", floors_command(), done=floors_ready),
     ("mi_spdnet_bn_calib", "sweep1"), ("mi_spdnet_bn_calib", "sweep2"),
-    ("mi_spdnet_bn", "sweep1"), ("mi_spdnet_bn", "sweep2"), ("mi_spdnet_bn", "final"),
+    ("mi_spdnet_bn", "sweep1"), ("mi_spdnet_bn", "final"),
 ]

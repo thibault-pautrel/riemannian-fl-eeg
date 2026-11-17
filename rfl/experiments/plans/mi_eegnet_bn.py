@@ -7,16 +7,14 @@ Same factors, tuning, selection and seeds as mi_spdnet_bn, on the same dataset
     scope           shared head | personal head (FedPer) | local only
     clients         one subject per client | IID clients
 
-plus the centralised reference with and without batch norm. Plain SGD, and FedAvg for
-the federated arms (EEGNet has no Stiefel weights). The momentum of the BatchNorm comes
+plus the centralised reference with and without batch norm. Plain SGD trained to
+convergence, and FedAvg for the federated arms (EEGNet has no Stiefel weights). The momentum of the BatchNorm comes
 from mi_eegnet_bn_calib. As in the SPDNet study, the running statistics used at
 evaluation are the momentum averages of training (no --bn-recalibrate). The shared
 BatchNorm averages the running means and variances of the clients with the other
 weights, as FedAvg does.
 
-    sweep1   learning rate x batch size, 12 cells x 3 seeds, horizon 200
-    sweep2   horizon (200, 100, 300) at the stage-1 choice, the shortest within one
-             standard error of the best
+    sweep1   learning rate x batch size, 12 cells x 3 seeds
     final    the selected values on 10 seeds, the same splits as the SPDNet arms
 
     export RFL_DATASET=BNCI2014_001
@@ -26,7 +24,7 @@ weights, as FedAvg does.
         $RFL_RESULTS/mi_BNCI2014_001_bn_eegnet/final \\
         --by model clients scope arch --metric client_mean_acc
 
-Runs per dataset: 648 + 162 + 180, plus the extensions.
+Runs per dataset: 648 + 180, plus the extensions.
 
 Arms, named <arm kind>_<variant>:
 
@@ -36,15 +34,14 @@ Arms, named <arm kind>_<variant>:
 """
 
 from rfl.experiments.plans.mi_eegnet_bn_calib import BN, NOBN, TRAINING, calibration
-from rfl.experiments.plans.mi_spdnet_bn import (FEDERATED, IID, SELECTION, WITH_CLIENTS)
+from rfl.experiments.plans.mi_spdnet_bn import FEDERATED, IID, WITH_CLIENTS
 from rfl.experiments.plans.mi_spdnet_bn import EXTEND as _EXTEND
-from rfl.experiments.plans.mi_spdnet_bn_calib import (DATASET, FINAL_SEEDS, HORIZON, LR,
+from rfl.experiments.plans.mi_spdnet_bn_calib import (BUDGET, DATASET, FINAL_SEEDS, LR,
                                                       SETTINGS, SWEEP_SEEDS)
 from rfl.experiments.protocol import Protocol, Variant
 
 NAME = f"mi_{DATASET}_bn_eegnet"
 EXTEND = _EXTEND                              # the rules of mi_spdnet_bn
-SELECTION = SELECTION                         # the shortest horizon within one SE
 
 
 def calibrated() -> tuple:
@@ -71,10 +68,10 @@ def study() -> Protocol:
             "iid_bn": Variant(args=IID + bn, kinds=WITH_CLIENTS),
             "iid_bnshared": Variant(args=IID + shared_bn, kinds=FEDERATED),
         },
-        space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": HORIZON},
+        space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": BUDGET},
                "dp": {}},
         search="staged",
-        stage_keys=[["lr", "batch_size"], ["horizon"]],
+        stage_keys=[["lr", "batch_size"]],
         sweep_seeds=SWEEP_SEEDS,
         final_seeds=FINAL_SEEDS,
         name=NAME,
@@ -82,11 +79,10 @@ def study() -> Protocol:
 
 
 STAGES = {"sweep1": lambda: study().sweep(0),
-          "sweep2": lambda: study().sweep(1),
           "final": lambda: study().final()}
 
 # Every step of the study, for rfl/experiments/pipeline.py and condor/submit_dag.sh.
 PIPELINE = [
     ("mi_eegnet_bn_calib", "sweep1"), ("mi_eegnet_bn_calib", "sweep2"),
-    ("mi_eegnet_bn", "sweep1"), ("mi_eegnet_bn", "sweep2"), ("mi_eegnet_bn", "final"),
+    ("mi_eegnet_bn", "sweep1"), ("mi_eegnet_bn", "final"),
 ]

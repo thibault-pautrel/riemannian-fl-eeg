@@ -514,10 +514,10 @@ def bn_plans(monkeypatch):
     importlib.reload(main)
 
 
-def _score(j):   # best: lr 0.1, batch 32, horizon 300, momentum 0.3, q 5, blocks 32,16
+def _score(j):   # best: lr 0.1, batch 32, momentum 0.3, q 5, blocks 32,16
     hp = j.hp
     return (0.5 + 0.1 * (j.lr == 0.1) + 0.05 * (j.batch_size == 32)
-            + 0.02 * (j.horizon == 300) + 0.01 * (hp.get("--bn-momentum") == 0.3)
+            + 0.01 * (hp.get("--bn-momentum") == 0.3)
             + 0.01 * (hp.get("--reeig-percentile") == 5) + 0.03 * ("a32_16" in j.arm))
 
 
@@ -553,7 +553,7 @@ def _write_floors(dataset, archs):
 def test_batch_norm_study_calibrates_then_tunes_every_arm_alike(root, bn_plans, dataset,
                                                                  n_calib, batches, deep):
     """One protocol: floors, calibration on the centralised arms, then the same tuning
-    (lr x batch, then horizon) for the 18 arms."""
+    (lr x batch) for the 18 arms, each trained to convergence within 3000 rounds."""
     from rfl.experiments.plans.mi_spdnet_bn_calib import STUDY
     bn_plans(dataset)
     with pytest.raises(SystemExit, match="no ReEig floors"):
@@ -564,9 +564,7 @@ def test_batch_norm_study_calibrates_then_tunes_every_arm_alike(root, bn_plans, 
     _run_stage("mi_spdnet_bn_calib", "sweep1", n_calib[0])
     _run_stage("mi_spdnet_bn_calib", "sweep2", n_calib[1])
     s1 = _run_stage("mi_spdnet_bn", "sweep1", 648)
-    assert {j.batch_size for j in s1} == batches and {j.horizon for j in s1} == {200}
-    s2 = _run_stage("mi_spdnet_bn", "sweep2", 162)
-    assert {j.horizon for j in s2} == {100, 200, 300}
+    assert {j.batch_size for j in s1} == batches and {j.horizon for j in s1} == {3000}
     final = G.plan_jobs("mi_spdnet_bn", "final")
     arms = {j.arm for j in final}
     assert len(final) == 180 and len(arms) == 18
@@ -575,8 +573,10 @@ def test_batch_norm_study_calibrates_then_tunes_every_arm_alike(root, bn_plans, 
         ns = _parse(j)
         bn = j.arm.endswith("_bn") or j.arm.endswith("bnshared")
         assert ns.use_batch_norm == bn and ns.learning_rate == 0.1 and ns.batch_size == 32
-        assert ns.rounds == 300 if j.entry == "fed" else ns.epochs == 300
+        assert ns.rounds == 3000 if j.entry == "fed" else ns.epochs == 3000
         assert ns.optimizer == "sgd" and ns.stiefel == "trivialization"
+        assert ns.lr_schedule == "plateau" and ns.report == "selected"
+        assert ns.selection_metric == "val_loss"
         assert ns.bn_momentum == (0.3 if bn else 0.1) and ns.reeig_percentile == 5
         assert ns.hidden_dims == ("32,16" if deep else STUDY[dataset]["architectures"][0])
         if j.entry == "fed":
@@ -617,26 +617,24 @@ def test_eegnet_batch_norm_study_mirrors_the_spdnet_one(root, eegnet_bn_plans, d
     with pytest.raises(SystemExit, match="not found"):
         G.plan_jobs("mi_eegnet_bn", "sweep1")             # calibrate first
     c1 = _run_stage("mi_eegnet_bn_calib", "sweep1", 36)
-    assert {j.horizon for j in c1} == {200} and all(_parse(j).bn_momentum == 0.1 for j in c1)
+    assert {j.horizon for j in c1} == {3000} and all(_parse(j).bn_momentum == 0.1 for j in c1)
     c2 = _run_stage("mi_eegnet_bn_calib", "sweep2", 9)
     assert {j.hp["--bn-momentum"] for j in c2} == {0.1, 0.01, 0.3}
     s1 = _run_stage("mi_eegnet_bn", "sweep1", 648)
-    assert {j.batch_size for j in s1} == batches and {j.horizon for j in s1} == {200}
-    s2 = _run_stage("mi_eegnet_bn", "sweep2", 162)
-    assert {j.horizon for j in s2} == {100, 200, 300}
+    assert {j.batch_size for j in s1} == batches and {j.horizon for j in s1} == {3000}
     final = G.plan_jobs("mi_eegnet_bn", "final")
     arms = {j.arm for j in final}
     assert len(final) == 180 and len(arms) == 18
     assert "fed_eegnet_local_bnshared" not in arms and "central_eegnet_iid_bn" not in arms
     assert {j.seed for j in final} == set(range(101, 111))
-    assert main.SELECTION == spd.SELECTION and main.EXTEND == spd.EXTEND
+    assert main.EXTEND == spd.EXTEND
     for j in final:
         ns = _parse(j)
         bn = j.arm.endswith("_bn") or j.arm.endswith("bnshared")
-        assert ns.model == "eegnet" and ns.optimizer == "sgd"
+        assert ns.model == "eegnet" and ns.optimizer == "sgd" and ns.lr_schedule == "plateau"
         assert ns.eegnet_norm_type == ("batch" if bn else "none")
         assert ns.learning_rate == 0.1 and ns.batch_size == 32
-        assert ns.rounds == 300 if j.entry == "fed" else ns.epochs == 300
+        assert ns.rounds == 3000 if j.entry == "fed" else ns.epochs == 3000
         assert ns.bn_momentum == (0.3 if bn else 0.1) and not ns.bn_recalibrate
         if j.entry == "fed":
             assert ns.aggregation in (None, "fedavg")
@@ -645,14 +643,13 @@ def test_eegnet_batch_norm_study_mirrors_the_spdnet_one(root, eegnet_bn_plans, d
             assert bool(ns.head_refit_epochs) == ("_shared_" in j.arm)
 
 
-def test_mi_study_keeps_its_step_numbers():
+def test_mi_study_step_numbers():
     from rfl.experiments.pipeline import steps as plan_steps
     steps = [s if isinstance(s, tuple) else ("floors",) for s in plan_steps("mi_study")]
-    assert steps[9] == ("mi_datasize_eegnet", "sweep1")
-    assert steps[12] == ("mi_datasize_tslr", "final")
-    assert steps[13:] == [("mi_eegnet_bn_calib", "sweep1"), ("mi_eegnet_bn_calib", "sweep2"),
-                          ("mi_eegnet_bn", "sweep1"), ("mi_eegnet_bn", "sweep2"),
-                          ("mi_eegnet_bn", "final")]
+    assert steps[7] == ("mi_datasize_eegnet", "sweep1")
+    assert steps[9] == ("mi_datasize_tslr", "final")
+    assert steps[10:] == [("mi_eegnet_bn_calib", "sweep1"), ("mi_eegnet_bn_calib", "sweep2"),
+                          ("mi_eegnet_bn", "sweep1"), ("mi_eegnet_bn", "final")]
 
 
 def test_eegnet_batch_norm_momentum():
@@ -779,8 +776,8 @@ def datasize_plans(bn_plans):
 
 
 def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasize_plans):
-    """Every (head, normalisation) pair per scenario, its own tuning, the batch and
-    horizon grids following N, selection on the reduced clients."""
+    """Every (head, normalisation) pair per scenario, its own tuning, the batch grid
+    following N, selection on the reduced clients."""
     from rfl.experiments.plans.mi_spdnet_bn_calib import STUDY
     datasize_plans("BNCI2014_001")
     _write_floors("BNCI2014_001", STUDY["BNCI2014_001"]["architectures"])
@@ -807,16 +804,9 @@ def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasiz
     for j in s1:
         fake(j, 0.5 + 0.1 * (j.lr == 0.1) + 0.05 * (j.batch_size in (8, 64)))
     assert G.main(["mi_datasize", "--stage", "sweep1", "--select"]) == 0
-    s2 = G.plan_jobs("mi_datasize", "sweep2")
-    assert {j.horizon for j in s2 if j.arm.endswith("_U5")} == {566, 283, 849}
-    assert {j.horizon for j in s2 if j.arm.endswith("_U20")} == {283, 141, 424}
-    assert {j.horizon for j in s2 if j.arm.endswith("_full")} == {200, 100, 300}
-    assert {(j.lr, j.batch_size) for j in s2 if j.arm.endswith("_U5")} == {(0.1, 8)}
-    for j in s2:
-        fake(j, 0.6)
-    assert G.main(["mi_datasize", "--stage", "sweep2", "--select"]) == 0
     final = G.plan_jobs("mi_datasize", "final")
-    assert len(final) == 400
+    assert len(final) == 400 and {j.horizon for j in final} == {3000}
+    assert {(j.lr, j.batch_size) for j in final if j.arm.endswith("_U5")} == {(0.1, 8)}
     for j in final:
         ns = _parse(j)
         bn = "_bn_" in j.arm or "_bnshared_" in j.arm
@@ -827,7 +817,7 @@ def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasiz
         assert bool(ns.head_refit_epochs) == ("_shared_" in j.arm)
     eeg = G.plan_jobs("mi_datasize_eegnet", "sweep1", check=True)
     assert len({j.arm for j in eeg}) == 40 and {j.lr for j in eeg} == {1e-2, 3e-2, 1e-1, 3e-1}
-    assert all("--optimizer" in j.args and "sgd" in j.args for j in eeg)
+    assert all("sgd" in j.args and "plateau" in j.args for j in eeg)
     ts = G.plan_jobs("mi_datasize_tslr", "final", check=True)
     assert len(ts) == 5 * 2 * 10 and {j.entry for j in ts} == {"tslr"}
 
