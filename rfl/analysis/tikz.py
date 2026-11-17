@@ -1,13 +1,14 @@
 """Writer of pgfplots figures (TikZ) with the data inlined, in the style of the DP-RFedProj paper.
 
-`grid_figure` writes one `tikzpicture` with a grid of log-log panels (pgfplots
-`groupplots`) and a single legend below the figure, on one line. The file only needs, in
-the preamble,
+`grid_figure` writes one `tikzpicture` with a grid of panels (pgfplots `groupplots`,
+log-log by default) and a single legend below the figure. The file only needs, in the
+preamble,
 
     \\usepackage{pgfplots}
     \\usepgfplotslibrary{groupplots}
 
-The colours C0, C3 and C7 are provided if the document does not define them.
+The colours C0 to C7, and those passed as `colours`, are provided if the document does
+not define them.
 """
 from __future__ import annotations
 
@@ -46,18 +47,21 @@ def _series(s: Dict) -> List[str]:
 
 def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]], *,
                 cols: int = 2, width: str = "0.47\\linewidth", height: str = "4.4cm",
-                legend_name: str = "synthlegend", comment: str = "") -> None:
-    """Write a grid of panels with one legend below the figure, on one line.
+                legend_name: str = "synthlegend", comment: str = "",
+                legend_columns: int = -1, colours: Dict[str, str] = None) -> None:
+    """Write a grid of panels with one legend below the figure (one line by default).
 
     Each panel is a dict with `title`, `xlabel`, `ylabel`, `xticks`, `ymin`, `ymax` and
-    `series`, and optionally `xlog` and `ylog` (default True). A series has `style` (a key
-    of STYLES), `x`, `y` and optionally `err_lo`, `err_hi` (error bars). `legend` lists
-    (label, style) pairs.
+    `series`, and optionally `xticklabels`, `xmin`, `xmax`, `xlog` and `ylog` (default
+    True). A series has `style` (a key of STYLES or pgfplots options), `x`, `y` and
+    optionally `err_lo`, `err_hi` (error bars). `legend` lists (label, style) pairs.
+    `colours` adds named colours, {name: RRGGBB}.
     """
     rows = (len(panels) + cols - 1) // cols
     lines = [f"% {comment}",
              "% Needs \\usepackage{pgfplots} and \\usepgfplotslibrary{groupplots}."]
-    lines += [f"\\providecolor{{{c}}}{{HTML}}{{{h}}}" for c, h in COLOURS.items()]
+    lines += [f"\\providecolor{{{c}}}{{HTML}}{{{h}}}"
+              for c, h in {**COLOURS, **(colours or {})}.items()]
     lines += [
         "\\begin{tikzpicture}",
         "\\begin{groupplot}[",
@@ -67,7 +71,8 @@ def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]
         "  tick label style={font=\\scriptsize}, label style={font=\\small},",
         "  title style={font=\\small},",
         "  grid=major, grid style={black!10},",
-        "  legend style={font=\\small, draw=none, legend columns=-1, column sep=1.2ex},",
+        f"  legend style={{font=\\small, draw=none, legend columns={legend_columns}, "
+        "column sep=1.2ex},",
         "  legend cell align=left,",
         "]",
     ]
@@ -76,7 +81,8 @@ def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]
                 f"xlabel={{{pan['xlabel']}}}", f"ylabel={{{pan['ylabel']}}}",
                 f"ymin={_num(pan['ymin'])}", f"ymax={_num(pan['ymax'])}",
                 "xtick={" + ",".join(_num(t) for t in pan["xticks"]) + "}",
-                "xticklabels={" + ",".join(f"{t:g}" for t in pan["xticks"]) + "}",
+                "xticklabels={" + ",".join(pan.get("xticklabels")
+                                           or [f"{t:g}" for t in pan["xticks"]]) + "}",
                 "minor xtick={}", "xmode=" + ("log" if pan.get("xlog", True) else "linear"),
                 "ymode=" + ("log" if pan.get("ylog", True) else "linear")]
         for key in ("xmin", "xmax"):
@@ -89,7 +95,7 @@ def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]
             lines += _series(s)
         if i == 0:
             for label, style in legend:
-                lines.append(f"\\addlegendimage{{{STYLES[style]}}}")
+                lines.append(f"\\addlegendimage{{{STYLES.get(style, style)}}}")
                 lines.append(f"\\addlegendentry{{{label}}}")
     lines += ["\\end{groupplot}",
               f"\\path (group c1r{rows}.outer south) -- (group c{cols}r{rows}.outer south)",

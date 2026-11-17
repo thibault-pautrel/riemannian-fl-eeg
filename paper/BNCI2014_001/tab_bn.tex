@@ -1,0 +1,19 @@
+\begin{tabular}{llcccccc}
+\toprule
+ & & \multicolumn{3}{c}{SPDNet} & \multicolumn{3}{c}{EEGNet} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}
+Clients & Head & no BN & BN (FedBN) & shared BN & no BN & BN (FedBN) & shared BN \\
+\midrule
+subject & Local & $67.9 \pm 1.4$ & $\mathbf{73.5} \pm 1.1$ & -- & $59.9 \pm 4.5$\,{\scriptsize (8)} & $\mathbf{74.2} \pm 2.2$ & -- \\
+ & FedPer & $68.7 \pm 1.5$ & $\mathbf{72.9} \pm 1.6$ & $55.1 \pm 0.9$ & $46.7 \pm 2.0$\,{\scriptsize (9)} & $\mathbf{69.6} \pm 2.1$ & $53.4 \pm 2.1$ \\
+ & Shared head & $50.2 \pm 1.8$ & $\mathbf{59.2} \pm 1.7$ & $44.9 \pm 1.6$ & $48.9 \pm 2.6$ & $\mathbf{63.0} \pm 2.8$ & $47.5 \pm 1.8$ \\
+ & Shared head, re-fitted & $57.7 \pm 2.6$ & $\mathbf{72.1} \pm 1.6$ & $72.0 \pm 1.6$ & $44.0 \pm 2.4$ & $\mathbf{53.2} \pm 2.7$ & $41.7 \pm 1.7$ \\
+\midrule
+IID & Local & $45.7 \pm 1.2$ & $\mathbf{50.3} \pm 1.8$ & -- & $33.2 \pm 2.2$ & $\mathbf{43.3} \pm 0.9$ & -- \\
+ & FedPer & $46.5 \pm 1.2$ & $\mathbf{51.3} \pm 1.2$ & $50.9 \pm 1.5$ & $44.9 \pm 1.7$ & $48.6 \pm 2.3$ & $\mathbf{56.4} \pm 2.8$ \\
+ & Shared head & $50.4 \pm 1.9$ & $56.5 \pm 1.4$ & $\mathbf{56.8} \pm 1.7$ & $42.0 \pm 3.0$ & $59.7 \pm 1.6$ & $\mathbf{60.5} \pm 1.5$ \\
+ & Shared head, re-fitted & $40.8 \pm 2.7$ & $\mathbf{53.6} \pm 1.6$ & $52.4 \pm 1.6$ & $33.6 \pm 1.7$ & $54.7 \pm 2.1$ & $\mathbf{54.9} \pm 2.4$ \\
+\midrule
+-- & Centralised & $54.8 \pm 1.5$ & $\mathbf{58.6} \pm 1.7$ & -- & $49.6 \pm 2.1$ & $\mathbf{62.8} \pm 1.5$ & -- \\
+\bottomrule
+\end{tabular}

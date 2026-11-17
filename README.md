@@ -87,6 +87,7 @@ python -m rfl.analysis.report results/mi_BNCI2014_001_bn/final \
     --by clients scope arch --metric client_mean_acc
 python -m rfl.analysis.stats results/mi_BNCI2014_001_bn/final --factor arch --by kind clients scope
 python -m rfl.analysis.datasize results/mi_BNCI2014_001_datasize*/final --out datasize --pairs
+python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001   # LaTeX tables and figures
 ```
 
 On an HTCondor cluster, `bash condor/submit_dag.sh mi_study` runs the same pipeline as

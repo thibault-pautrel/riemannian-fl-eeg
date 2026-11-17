@@ -1,0 +1,37 @@
+\begin{tabular}{llccccc}
+\toprule
+ & & \multicolumn{5}{c}{trials per class and subject} \\
+\cmidrule(lr){3-7}
+Head & Normalisation & 5 & 10 & 20 & 40 & all \\
+\midrule
+\multicolumn{7}{l}{\emph{TS+LR}} \\
+Local &  & $\mathbf{48.1} \pm 4.3$ & $\mathbf{57.3} \pm 2.6$ & $\mathbf{62.8} \pm 2.2$ & $\mathbf{68.1} \pm 2.4$ & $\mathbf{74.3} \pm 1.5$ \\
+Pooled re-centred &  & $48.0 \pm 1.9$ & $51.8 \pm 3.3$ & $56.9 \pm 2.6$ & $60.0 \pm 1.8$ & $63.6 \pm 1.4$ \\
+\midrule
+\multicolumn{7}{l}{\emph{SPDNet}} \\
+Local & no BN & $47.0 \pm 2.7$ & $52.8 \pm 2.3$ & $57.0 \pm 1.4$ & $61.8 \pm 2.0$ & $68.8 \pm 1.4$ \\
+Local & BN & $49.7 \pm 2.4$ & $\mathbf{56.7} \pm 2.4$ & $61.5 \pm 2.0$ & $67.0 \pm 2.4$ & $\mathbf{73.8} \pm 1.5$ \\
+FedPer & no BN & $46.9 \pm 2.1$ & $53.6 \pm 1.9$ & $56.5 \pm 1.6$ & $58.0 \pm 2.6$ & $67.4 \pm 1.4$ \\
+FedPer & BN (FedBN) & $50.0 \pm 2.7$ & $56.4 \pm 1.9$ & $60.6 \pm 1.7$ & $66.8 \pm 2.1$ & $72.4 \pm 1.5$ \\
+FedPer & shared BN & $38.4 \pm 1.7$ & $46.1 \pm 2.5$ & $49.7 \pm 2.1$ & $51.6 \pm 3.2$ & $56.5 \pm 1.5$ \\
+Shared head & no BN & $39.0 \pm 2.6$ & $38.9 \pm 2.1$ & $40.8 \pm 1.1$ & $40.6 \pm 1.2$ & $40.9 \pm 1.5$ \\
+Shared head & BN (FedBN) & $50.5 \pm 1.8$ & $54.1 \pm 2.1$ & $56.8 \pm 1.8$ & $59.1 \pm 1.5$ & $61.1 \pm 1.7$ \\
+Shared head & shared BN & $39.0 \pm 2.1$ & $40.3 \pm 2.1$ & $43.0 \pm 1.4$ & $43.6 \pm 1.3$ & $44.9 \pm 1.2$ \\
+Shared head, re-fitted & no BN & $39.9 \pm 2.9$ & $41.7 \pm 2.7$ & $49.8 \pm 2.3$ & $40.6 \pm 1.3$ & $40.1 \pm 3.5$ \\
+Shared head, re-fitted & BN (FedBN) & $50.6 \pm 2.5$ & $56.7 \pm 1.7$ & $\mathbf{62.3} \pm 1.2$ & $\mathbf{67.1} \pm 1.2$ & $72.2 \pm 1.1$ \\
+Shared head, re-fitted & shared BN & $\mathbf{50.8} \pm 2.3$ & $55.3 \pm 1.7$ & $60.2 \pm 2.2$ & $65.1 \pm 1.9$ & $71.8 \pm 1.5$ \\
+\midrule
+\multicolumn{7}{l}{\emph{EEGNet}} \\
+Local & no BN & $26.5 \pm 1.7$ & $25.0 \pm 1.7$ & $29.4 \pm 2.1$ & $41.9 \pm 3.4$\,{\scriptsize (9)} & $50.0 \pm 1.7$ \\
+Local & BN & $35.1 \pm 2.2$ & $37.1 \pm 1.7$ & $46.0 \pm 1.9$ & $53.5 \pm 2.8$ & $\mathbf{71.5} \pm 2.6$ \\
+FedPer & no BN & $26.3 \pm 1.7$ & $25.2 \pm 1.7$ & $28.1 \pm 1.9$ & $33.7 \pm 3.2$\,{\scriptsize (8)} & $50.1 \pm 3.3$ \\
+FedPer & BN (FedBN) & $33.0 \pm 2.6$ & $37.5 \pm 2.6$ & $45.2 \pm 1.8$ & $56.2 \pm 2.5$ & $69.0 \pm 2.4$ \\
+FedPer & shared BN & $32.2 \pm 2.2$ & $33.8 \pm 4.0$ & $42.6 \pm 3.2$ & $50.7 \pm 2.1$ & $55.4 \pm 2.3$ \\
+Shared head & no BN & $25.1 \pm 0.3$ & $27.7 \pm 1.7$ & $34.8 \pm 4.2$ & $35.9 \pm 4.9$ & $40.9 \pm 3.4$ \\
+Shared head & BN (FedBN) & $\mathbf{38.2} \pm 3.7$ & $\mathbf{41.5} \pm 3.3$ & $\mathbf{51.7} \pm 2.2$ & $\mathbf{56.4} \pm 1.8$ & $59.6 \pm 2.2$ \\
+Shared head & shared BN & $35.5 \pm 3.0$ & $39.8 \pm 2.8$ & $44.9 \pm 1.6$ & $46.2 \pm 1.3$ & $50.1 \pm 2.0$ \\
+Shared head, re-fitted & no BN & $25.4 \pm 1.0$ & $27.3 \pm 3.1$ & $33.8 \pm 3.3$ & $33.7 \pm 3.7$ & $35.7 \pm 1.9$ \\
+Shared head, re-fitted & BN (FedBN) & $38.2 \pm 3.9$ & $38.7 \pm 2.0$ & $44.1 \pm 2.8$ & $46.2 \pm 2.1$ & $48.5 \pm 2.4$ \\
+Shared head, re-fitted & shared BN & $33.4 \pm 1.7$ & $41.1 \pm 2.0$ & $39.2 \pm 2.6$ & $48.0 \pm 2.3$ & $44.9 \pm 2.3$ \\
+\bottomrule
+\end{tabular}

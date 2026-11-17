@@ -1,0 +1,229 @@
+% Client mean test accuracy against the trials per class and subject (scenario U), mean and standard error over the seeds.
+% Needs \usepackage{pgfplots} and \usepgfplotslibrary{groupplots}.
+\providecolor{C0}{HTML}{1B6CA8}
+\providecolor{C1}{HTML}{E1701A}
+\providecolor{C2}{HTML}{2C8B57}
+\providecolor{C3}{HTML}{A02C2C}
+\providecolor{C7}{HTML}{444444}
+\providecolor{rflTslr}{HTML}{52514E}
+\providecolor{rflPooled}{HTML}{A3A29C}
+\providecolor{rflLocal}{HTML}{EB6834}
+\providecolor{rflRefit}{HTML}{EDA100}
+\providecolor{rflShared}{HTML}{2A78D6}
+\providecolor{rflFedper}{HTML}{1BAF7A}
+\begin{tikzpicture}
+\begin{groupplot}[
+  group style={group size=2 by 1, horizontal sep=1.6cm, vertical sep=1.9cm},
+  width=0.47\linewidth, height=4.4cm,
+  tick label style={font=\scriptsize}, label style={font=\small},
+  title style={font=\small},
+  grid=major, grid style={black!10},
+  legend style={font=\small, draw=none, legend columns=4, column sep=1.2ex},
+  legend cell align=left,
+]
+\nextgroupplot[title={SPDNet}, xlabel={trials per class and subject}, ylabel={test accuracy (\%)}, ymin=35, ymax=75, xtick={5,10,20,40,80}, xticklabels={5,10,20,40,all}, minor xtick={}, xmode=log, ymode=linear, xmin=3.84615, xmax=104, legend to name=datasizelegend]
+\addplot+[rflFedper, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,50.0074) += (0,0.859223) -= (0,0.859223)
+  (10,56.4498) += (0,0.599465) -= (0,0.599465)
+  (20,60.5599) += (0,0.534093) -= (0,0.534093)
+  (40,66.8285) += (0,0.650647) -= (0,0.650647)
+  (80,72.4079) += (0,0.489009) -= (0,0.489009)
+};
+\addplot+[rflFedper, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,46.9468) += (0,0.650332) -= (0,0.650332)
+  (10,53.6116) += (0,0.598036) -= (0,0.598036)
+  (20,56.5425) += (0,0.499508) -= (0,0.499508)
+  (40,57.9614) += (0,0.814558) -= (0,0.814558)
+  (80,67.4366) += (0,0.447609) -= (0,0.447609)
+};
+\addplot+[rflFedper, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,38.3968) += (0,0.529885) -= (0,0.529885)
+  (10,46.062) += (0,0.799418) -= (0,0.799418)
+  (20,49.6604) += (0,0.658112) -= (0,0.658112)
+  (40,51.6261) += (0,0.996976) -= (0,0.996976)
+  (80,56.5391) += (0,0.476596) -= (0,0.476596)
+};
+\addplot+[rflLocal, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,49.6689) += (0,0.756465) -= (0,0.756465)
+  (10,56.7348) += (0,0.771458) -= (0,0.771458)
+  (20,61.4576) += (0,0.638471) -= (0,0.638471)
+  (40,67.0112) += (0,0.762208) -= (0,0.762208)
+  (80,73.7975) += (0,0.489565) -= (0,0.489565)
+};
+\addplot+[rflLocal, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,47.0368) += (0,0.86605) -= (0,0.86605)
+  (10,52.8403) += (0,0.723843) -= (0,0.723843)
+  (20,56.9776) += (0,0.455172) -= (0,0.455172)
+  (40,61.7808) += (0,0.629222) -= (0,0.629222)
+  (80,68.7611) += (0,0.452359) -= (0,0.452359)
+};
+\addplot+[rflPooled, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,47.9922) += (0,0.602156) -= (0,0.602156)
+  (10,51.8495) += (0,1.04798) -= (0,1.04798)
+  (20,56.8822) += (0,0.833362) -= (0,0.833362)
+  (40,60.0414) += (0,0.582463) -= (0,0.582463)
+  (80,63.6353) += (0,0.431954) -= (0,0.431954)
+};
+\addplot+[rflRefit, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,50.6005) += (0,0.799781) -= (0,0.799781)
+  (10,56.7145) += (0,0.530541) -= (0,0.530541)
+  (20,62.3317) += (0,0.384628) -= (0,0.384628)
+  (40,67.1202) += (0,0.364637) -= (0,0.364637)
+  (80,72.1971) += (0,0.345557) -= (0,0.345557)
+};
+\addplot+[rflRefit, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,39.8987) += (0,0.921526) -= (0,0.921526)
+  (10,41.7213) += (0,0.853209) -= (0,0.853209)
+  (20,49.7977) += (0,0.71728) -= (0,0.71728)
+  (40,40.6182) += (0,0.395831) -= (0,0.395831)
+  (80,40.0567) += (0,1.10369) -= (0,1.10369)
+};
+\addplot+[rflRefit, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,50.8408) += (0,0.740528) -= (0,0.740528)
+  (10,55.2965) += (0,0.543337) -= (0,0.543337)
+  (20,60.2013) += (0,0.680066) -= (0,0.680066)
+  (40,65.0555) += (0,0.588892) -= (0,0.588892)
+  (80,71.7874) += (0,0.477914) -= (0,0.477914)
+};
+\addplot+[rflShared, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,50.5331) += (0,0.55929) -= (0,0.55929)
+  (10,54.1149) += (0,0.65624) -= (0,0.65624)
+  (20,56.7507) += (0,0.564292) -= (0,0.564292)
+  (40,59.1081) += (0,0.483278) -= (0,0.483278)
+  (80,61.0821) += (0,0.551854) -= (0,0.551854)
+};
+\addplot+[rflShared, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,39.0429) += (0,0.83138) -= (0,0.83138)
+  (10,38.8783) += (0,0.649547) -= (0,0.649547)
+  (20,40.8218) += (0,0.348046) -= (0,0.348046)
+  (40,40.6119) += (0,0.372122) -= (0,0.372122)
+  (80,40.9381) += (0,0.486778) -= (0,0.486778)
+};
+\addplot+[rflShared, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,39.0364) += (0,0.671435) -= (0,0.671435)
+  (10,40.2632) += (0,0.66946) -= (0,0.66946)
+  (20,42.9659) += (0,0.455942) -= (0,0.455942)
+  (40,43.6297) += (0,0.40448) -= (0,0.40448)
+  (80,44.8852) += (0,0.381382) -= (0,0.381382)
+};
+\addplot+[rflTslr, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,48.1357) += (0,1.35448) -= (0,1.35448)
+  (10,57.3265) += (0,0.828348) -= (0,0.828348)
+  (20,62.8048) += (0,0.702262) -= (0,0.702262)
+  (40,68.0747) += (0,0.74776) -= (0,0.74776)
+  (80,74.3064) += (0,0.488234) -= (0,0.488234)
+};
+\addlegendimage{rflTslr, line width=2pt}
+\addlegendentry{TS+LR, local}
+\addlegendimage{rflPooled, line width=2pt}
+\addlegendentry{TS+LR, pooled re-centred}
+\addlegendimage{rflLocal, line width=2pt}
+\addlegendentry{Local}
+\addlegendimage{rflFedper, line width=2pt}
+\addlegendentry{FedPer}
+\addlegendimage{rflShared, line width=2pt}
+\addlegendentry{Shared head}
+\addlegendimage{rflRefit, line width=2pt}
+\addlegendentry{Shared head, re-fitted}
+\addlegendimage{black!70, thick, densely dotted, mark=triangle*, mark options={solid}}
+\addlegendentry{no BN}
+\addlegendimage{black!70, thick, solid, mark=*, mark options={solid}}
+\addlegendentry{BN (FedBN)}
+\addlegendimage{black!70, thick, dashed, mark=square*, mark options={solid}}
+\addlegendentry{shared BN}
+\nextgroupplot[title={EEGNet}, xlabel={trials per class and subject}, ylabel={test accuracy (\%)}, ymin=20, ymax=75, xtick={5,10,20,40,80}, xticklabels={5,10,20,40,all}, minor xtick={}, xmode=log, ymode=linear, xmin=3.84615, xmax=104]
+\addplot+[rflFedper, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,32.9676) += (0,0.828264) -= (0,0.828264)
+  (10,37.5334) += (0,0.818367) -= (0,0.818367)
+  (20,45.1515) += (0,0.581939) -= (0,0.581939)
+  (40,56.1628) += (0,0.799228) -= (0,0.799228)
+  (80,68.979) += (0,0.771602) -= (0,0.771602)
+};
+\addplot+[rflFedper, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,26.3052) += (0,0.532582) -= (0,0.532582)
+  (10,25.2219) += (0,0.551018) -= (0,0.551018)
+  (20,28.1304) += (0,0.586146) -= (0,0.586146)
+  (40,33.6956) += (0,1.13633) -= (0,1.13633)
+  (80,50.0713) += (0,1.03478) -= (0,1.03478)
+};
+\addplot+[rflFedper, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,32.1789) += (0,0.699111) -= (0,0.699111)
+  (10,33.8033) += (0,1.24931) -= (0,1.24931)
+  (20,42.5774) += (0,1.00332) -= (0,1.00332)
+  (40,50.7422) += (0,0.679676) -= (0,0.679676)
+  (80,55.4023) += (0,0.735783) -= (0,0.735783)
+};
+\addplot+[rflLocal, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,35.0903) += (0,0.68443) -= (0,0.68443)
+  (10,37.1265) += (0,0.55155) -= (0,0.55155)
+  (20,46.0461) += (0,0.591575) -= (0,0.591575)
+  (40,53.4976) += (0,0.874571) -= (0,0.874571)
+  (80,71.5121) += (0,0.818093) -= (0,0.818093)
+};
+\addplot+[rflLocal, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,26.4679) += (0,0.543696) -= (0,0.543696)
+  (10,24.9622) += (0,0.534962) -= (0,0.534962)
+  (20,29.4374) += (0,0.656588) -= (0,0.656588)
+  (40,41.8549) += (0,1.13115) -= (0,1.13115)
+  (80,49.9976) += (0,0.535675) -= (0,0.535675)
+};
+\addplot+[rflPooled, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,47.9922) += (0,0.602156) -= (0,0.602156)
+  (10,51.8495) += (0,1.04798) -= (0,1.04798)
+  (20,56.8822) += (0,0.833362) -= (0,0.833362)
+  (40,60.0414) += (0,0.582463) -= (0,0.582463)
+  (80,63.6353) += (0,0.431954) -= (0,0.431954)
+};
+\addplot+[rflRefit, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,38.1617) += (0,1.22673) -= (0,1.22673)
+  (10,38.703) += (0,0.630121) -= (0,0.630121)
+  (20,44.0872) += (0,0.879864) -= (0,0.879864)
+  (40,46.1512) += (0,0.650707) -= (0,0.650707)
+  (80,48.4661) += (0,0.765327) -= (0,0.765327)
+};
+\addplot+[rflRefit, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,25.4059) += (0,0.319287) -= (0,0.319287)
+  (10,27.2513) += (0,0.975342) -= (0,0.975342)
+  (20,33.846) += (0,1.05531) -= (0,1.05531)
+  (40,33.6657) += (0,1.1831) -= (0,1.1831)
+  (80,35.6989) += (0,0.601102) -= (0,0.601102)
+};
+\addplot+[rflRefit, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,33.4282) += (0,0.550241) -= (0,0.550241)
+  (10,41.1328) += (0,0.627987) -= (0,0.627987)
+  (20,39.2476) += (0,0.833689) -= (0,0.833689)
+  (40,47.9839) += (0,0.742577) -= (0,0.742577)
+  (80,44.9067) += (0,0.73041) -= (0,0.73041)
+};
+\addplot+[rflShared, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,38.1763) += (0,1.18306) -= (0,1.18306)
+  (10,41.519) += (0,1.05749) -= (0,1.05749)
+  (20,51.6594) += (0,0.681412) -= (0,0.681412)
+  (40,56.4235) += (0,0.556474) -= (0,0.556474)
+  (80,59.5556) += (0,0.683701) -= (0,0.683701)
+};
+\addplot+[rflShared, thick, densely dotted, mark=triangle*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,25.0752) += (0,0.0803867) -= (0,0.0803867)
+  (10,27.6923) += (0,0.548514) -= (0,0.548514)
+  (20,34.8155) += (0,1.33734) -= (0,1.33734)
+  (40,35.9016) += (0,1.53561) -= (0,1.53561)
+  (80,40.9443) += (0,1.06044) -= (0,1.06044)
+};
+\addplot+[rflShared, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,35.5029) += (0,0.940465) -= (0,0.940465)
+  (10,39.8118) += (0,0.894254) -= (0,0.894254)
+  (20,44.9459) += (0,0.494375) -= (0,0.494375)
+  (40,46.1727) += (0,0.42187) -= (0,0.42187)
+  (80,50.0515) += (0,0.638984) -= (0,0.638984)
+};
+\addplot+[rflTslr, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,48.1357) += (0,1.35448) -= (0,1.35448)
+  (10,57.3265) += (0,0.828348) -= (0,0.828348)
+  (20,62.8048) += (0,0.702262) -= (0,0.702262)
+  (40,68.0747) += (0,0.74776) -= (0,0.74776)
+  (80,74.3064) += (0,0.488234) -= (0,0.488234)
+};
+\end{groupplot}
+\path (group c1r1.outer south) -- (group c2r1.outer south)
+  node[midway, anchor=north, yshift=-3pt] {\pgfplotslegendfromname{datasizelegend}};
+\end{tikzpicture}
