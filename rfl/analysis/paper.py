@@ -463,6 +463,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     a = p.parse_args(argv)
     root, out = Path(a.results), Path(a.out or f"paper/{a.dataset}")
     out.mkdir(parents=True, exist_ok=True)
+    for old in [*out.glob("tab_*.tex"), *out.glob("fig_*.tex"), *out.glob("results.*")]:
+        old.unlink()                    # a study without runs leaves no stale file
     details = []
 
     bn = final_runs(root, a.dataset, ("bn", "bn_eegnet"))

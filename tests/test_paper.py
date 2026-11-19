@@ -71,7 +71,10 @@ def _fake(root, rng):
 def test_paper_writes_every_table_and_figure(tmp_path):
     _fake(tmp_path / "res", np.random.default_rng(0))
     out = tmp_path / "out"
+    out.mkdir()
+    (out / "tab_stale.tex").write_text("old")
     paper.main(["DS", "--results", str(tmp_path / "res"), "--out", str(out)])
+    assert not (out / "tab_stale.tex").exists()
     names = {p.name for p in out.iterdir()}
     assert {"tab_bn.tex", "tab_bn_clients_spdnet.tex", "tab_bn_clients_eegnet.tex",
                      "fig_bn_rounds.tex", "tab_datasize.tex", "fig_datasize.tex",
