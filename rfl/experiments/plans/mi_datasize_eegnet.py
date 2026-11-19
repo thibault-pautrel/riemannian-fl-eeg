@@ -2,10 +2,9 @@
 
 EEGNet trains with plain SGD to convergence, as SPDNet does (mi_eegnet_bn_calib,
 TRAINING), on the same learning-rate grid, so that the two models differ only by their
-architecture and aggregation. Plain SGD has no
-state, so the new optimiser of each federated round changes nothing. Its
-normalisation is the BatchNorm of the original architecture: none (nobn), kept on each
-client (bn, FedBN) or shared (bnshared). As for SPDNet, the running statistics are set
+architecture and aggregation. Plain SGD has no state, so the new optimiser of each
+federated round changes nothing. EEGNet keeps the BatchNorm of its original
+architecture, kept on each client (bn, FedBN) or shared (bnshared). As for SPDNet, the running statistics are set
 exactly after training (--bn-recalibrate), so that both models are treated alike.
 """
 
@@ -20,8 +19,7 @@ NAME = f"mi_{DATASET}_datasize_eegnet"
 EXTEND = EXTEND                 # the rules of mi_datasize
 SELECTION = SELECTION
 BN = ("--eegnet-norm-type", "batch", "--bn-recalibrate")
-NORMS = {"nobn": (("--eegnet-norm-type", "none"), None),
-         "bn": (BN, None),
+NORMS = {"bn": (BN, None),
          "bnshared": (BN + ("--no-fedbn",), FEDERATED)}
 
 

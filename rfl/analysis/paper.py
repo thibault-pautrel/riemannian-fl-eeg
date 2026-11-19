@@ -33,7 +33,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -130,14 +130,18 @@ def bn_cells(df: pd.DataFrame) -> pd.DataFrame:
 def bn_table(cells: pd.DataFrame) -> List[str]:
     """Rows: client partition and head. Columns: network and normalisation."""
     models = [m for m in MODELS if m in set(cells.model)]
-    stats = {k: _stats(g.acc) for k, g in cells.groupby(["model", "clients", "head", "norm"])}
+    norms = [n for n in NORMS if n in set(cells.norm)]
+    k = len(norms)
+    stats = {key: _stats(g.acc)
+             for key, g in cells.groupby(["model", "clients", "head", "norm"])}
     n_max = int(max(s["count"] for s in stats.values()))
-    lines = [f"\\begin{{tabular}}{{ll{'ccc' * len(models)}}}", "\\toprule",
-             " & & " + " & ".join(f"\\multicolumn{{3}}{{c}}{{{MODELS[m]}}}" for m in models)
+    lines = [f"\\begin{{tabular}}{{ll{'c' * k * len(models)}}}", "\\toprule",
+             " & & " + " & ".join(f"\\multicolumn{{{k}}}{{c}}{{{MODELS[m]}}}" for m in models)
              + " \\\\",
-             "".join(f"\\cmidrule(lr){{{3 + 3 * i}-{5 + 3 * i}}}" for i in range(len(models))),
-             "Clients & Head & " + " & ".join(list(NORMS.values()) * len(models)) + " \\\\",
-             "\\midrule"]
+             "".join(f"\\cmidrule(lr){{{3 + k * i}-{2 + k * (i + 1)}}}"
+                     for i in range(len(models))),
+             "Clients & Head & " + " & ".join([NORMS[n] for n in norms] * len(models))
+             + " \\\\", "\\midrule"]
     groups = [(c, [h for h in ("local", "fedper", "shared", "refit")])
               for c in ("subject", "iid") if c in set(cells.clients)]
     if "central" in set(cells.clients):
@@ -149,7 +153,7 @@ def bn_table(cells: pd.DataFrame) -> List[str]:
         for head in heads:
             parts = []
             for m in models:
-                vals = [stats.get((m, clients, head, n)) for n in NORMS]
+                vals = [stats.get((m, clients, head, n)) for n in norms]
                 best = _best(vals)
                 parts += [_cell(v, v is not None and v["mean"] == best, n_max) for v in vals]
             if all(p == "--" for p in parts):

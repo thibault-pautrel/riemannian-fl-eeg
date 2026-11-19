@@ -75,7 +75,7 @@ within 3000 rounds, and the model of the lowest validation loss is reported.
 
 | Plan | Question |
 |---|---|
-| `mi_spdnet_bn` | Does the SPD batch norm help federated SPDNet? |
+| `mi_spdnet_bn` | Should the SPD batch norm of federated SPDNet stay on each client or be shared? |
 | `mi_eegnet_bn` | The same for EEGNet |
 | `mi_datasize` (`_eegnet`, `_tslr`) | From how many trials per class does federation beat local training? |
 | `mi_study` | All of them, for one dataset |

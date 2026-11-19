@@ -1,9 +1,12 @@
 """Step 1 of the batch-norm study: calibrate the dataset-level settings, centrally.
 
+SPDNet always has its SPD batch norm (Gallet et al. show that it helps): the study asks
+where it lives, on each client or shared.
+
 The protocol of the study:
 
 0. ReEig floors (`analyze_covariances --architectures`, no training). For every
-   candidate architecture, with and without batch norm, and every percentile q, each
+   candidate architecture, with batch norm, and every percentile q, each
    floor is the q-th percentile of the spectrum its ReEig acts on (after the BiMap
    congruences, and after the batch norm of the previous block when there is one).
    Written to $RFL_RESULTS/reeig_floors/<dataset>.json, read by the runners
@@ -11,8 +14,8 @@ The protocol of the study:
 1. Calibration (this plan), on the centralised SPDNet, by mean validation accuracy over
    3 seeds: stage 1 tunes the learning rate and the batch size of each candidate
    architecture (q = 15), stage 2 the percentile q and, with batch norm, the momentum of
-   the running mean. The best architecture is then kept, with and without batch norm
-   (Schirrmeister2017: four two-block candidates; the other datasets keep one block).
+   the running mean. The best architecture is then kept (Schirrmeister2017: four
+   two-block candidates; the other datasets keep one block).
 2. Study (mi_spdnet_bn). Every arm, centralised or federated, personalised or not, gets
    the same tuning (learning rate x batch size) with these settings fixed.
 
@@ -23,7 +26,7 @@ of the personalised-FL paper (arXiv:2609.29037), with SGD in place of Adam.
 
 A grid edge extends by itself (EXTEND, rfl/experiments/pipeline.py). The whole study
 runs as one HTCondor DAG: `bash condor/submit_dag.sh mi_spdnet_bn` (see mi_spdnet_bn).
-Runs: 108 per dataset (72 + 36), 432 for Schirrmeister2017, plus the extensions.
+Runs: 63 per dataset (36 + 27), 252 for Schirrmeister2017, plus the extensions.
 `STUDY` below holds the settings of each dataset, shared with mi_spdnet_bn.
 """
 
@@ -115,8 +118,6 @@ def calibration(dataset: str = DATASET) -> Protocol:
     variants = {}
     for arch in st["architectures"]:
         a = arch_name(arch)
-        variants[f"{a}_nobn"] = Variant(args=arch_args(arch),
-                                        space={"--reeig-percentile": QUANTILES})
         variants[f"{a}_bn"] = Variant(args=arch_args(arch) + BN,
                                       space={"--reeig-percentile": QUANTILES,
                                              "--bn-momentum": MOMENTUM})

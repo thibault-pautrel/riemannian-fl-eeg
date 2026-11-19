@@ -8,15 +8,16 @@ are set aside: their reduced subjects, drawn at random per seed, cover the subje
 unevenly.
 
 Arms, for each scenario: every combination of head (shared, shared + re-fit, personal
-FedPer, local) and normalisation (none, SPD batch norm kept on each client = FedBN,
-shared SPD batch norm), so both levels of personalisation (head and batch norm) are
-covered. The architecture, ReEig percentile and momentum of the running mean come from
+FedPer, local) and placement of the SPD batch norm (kept on each client = FedBN, or
+shared), so both levels of personalisation (head and batch norm) are covered. SPDNet
+always has its batch norm, as in the batch-norm study. The architecture, ReEig percentile and momentum of the running mean come from
 the calibration of the batch-norm study (mi_spdnet_bn_calib, centralised, all data).
 With few trials the running mean has few updates, so every batch-norm arm sets it
 exactly after training (--bn-recalibrate, rfl/models/bn_recalibration.py).
 
 Each arm is tuned on its own (learning rate x batch size), on the validation accuracy
-of the reduced clients, and trains to convergence (mi_spdnet_bn_calib, SCHEDULE). Companion plans, same dataset:
+of the reduced clients, and trains to convergence (mi_spdnet_bn_calib, SCHEDULE).
+Companion plans, same dataset:
 mi_datasize_eegnet (EEGNet arms) and mi_datasize_tslr (tangent space + logistic
 regression, local and pooled re-centred). The whole study is one DAG:
 
@@ -25,8 +26,8 @@ regression, local and pooled re-centred). The whole study is one DAG:
     python -m rfl.analysis.datasize $RFL_RESULTS/mi_BNCI2014_001_datasize*/final \\
         --out datasize_BNCI2014_001
 
-Cost per dataset (BNCI2014_001, 5 scenarios): 40 SPDNet arms x (36 sweep runs + 10
-final seeds), 1,840 runs, plus the extensions. Trim DATASIZE below to go faster.
+Cost per dataset (BNCI2014_001, 5 scenarios): 25 SPDNet arms x (36 sweep runs + 10
+final seeds), 1,150 runs, plus the extensions. Trim DATASIZE below to go faster.
 """
 
 import os
@@ -68,9 +69,8 @@ SELECTION = SELECTION
 
 def study() -> Protocol:
     from rfl.experiments.plans.mi_spdnet_bn import calibrated
-    nobn, bn = calibrated()
-    bn = tuple(bn) + ("--bn-recalibrate",)
-    norms = {"nobn": (nobn, None), "bn": (bn, None),
+    bn = tuple(calibrated()) + ("--bn-recalibrate",)
+    norms = {"bn": (bn, None),
              "bnshared": (bn + ("--no-fedbn",), FEDERATED)}
     return Protocol(
         dataset=DATASET, models=("spdnet",), aggregations={"spdnet": ("projavg",)},

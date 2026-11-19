@@ -11,8 +11,8 @@ For each scenario, every combination of the two levels of personalisation is an 
 
     head            shared (fed_shared, and its head re-fit in the final stage),
                     personal (fed_fedper), or nothing shared (fed_local)
-    normalisation   none (nobn), batch norm kept on each client (bn, FedBN), or shared
-                    batch norm (bnshared, federated arms only)
+    normalisation   the variants of the plan, here batch norm kept on each client (bn,
+                    FedBN) or shared (bnshared, federated arms only)
 
 The arm `fed_<model>_<agg>_<head>_<norm>_<scenario>` is tuned on its own (learning rate
 x batch size), selected on the validation accuracy of the reduced clients

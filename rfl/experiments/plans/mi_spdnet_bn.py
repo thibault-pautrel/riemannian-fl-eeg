@@ -1,13 +1,14 @@
-"""Step 2 of the batch-norm study: does the SPD batch norm help federated EEG decoding?
+"""Step 2 of the batch-norm study: where should the SPD batch norm of SPDNet live?
 
-Factors, for SPDNet on one dataset (RFL_DATASET):
+SPDNet always has its batch norm (Gallet et al. show that it helps). Factors, on one
+dataset (RFL_DATASET):
 
-    normalisation   none | SPD batch norm kept on each client (FedBN) | shared batch norm
+    normalisation   SPD batch norm kept on each client (FedBN) | shared batch norm
     scope           shared head ('classical' federated) | personal head (FedPer) | local only
     clients         one subject per client (non-IID) | IID clients (the same trials
                     pooled and dealt at random to the same number of clients)
 
-plus a centralised reference with and without batch norm: 18 arms. The IID clients are
+plus a centralised reference: 11 arms. The IID clients are
 the control: FedBN and a shared batch norm should then give the same result. The batch
 norm uses the GAH mean. DP refuses the layer, so the study is non-private. Every arm
 trains with plain SGD and the library's orthogonal parametrization of the BiMap weights,
@@ -33,19 +34,17 @@ study runs as one HTCondor DAG (PIPELINE below, rfl/experiments/pipeline.py):
     python -m rfl.analysis.stats $RFL_RESULTS/mi_BNCI2014_001_bn/final \\
         --factor arch --by kind clients scope
 
-Runs per dataset: 648 + 180, plus the extensions.
+Runs per dataset: 396 + 110, plus the extensions.
 
 Arms, named <arm kind>_<variant>:
 
-    central_spdnet_{nobn,bn}
-    fed_spdnet_projavg_{shared,fedper}_{nobn,bn,bnshared,iid_nobn,iid_bn,iid_bnshared}
-    fed_spdnet_local_{nobn,bn,iid_nobn,iid_bn}
+    central_spdnet_bn
+    fed_spdnet_projavg_{shared,fedper}_{bn,bnshared,iid_bn,iid_bnshared}
+    fed_spdnet_local_{bn,iid_bn}
 
 The protocol is built when a stage is requested, from the floors file and the
 calibration, which must be finished and selected first.
 """
-
-from typing import Tuple
 
 from rfl.experiments.pipeline import Command
 from rfl.experiments.plans.mi_spdnet_bn_calib import EXTEND as _EXTEND
@@ -60,30 +59,21 @@ WITH_CLIENTS = FEDERATED + ("fed_local",)      # the client partition matters
 NAME = f"mi_{DATASET}_bn"
 
 
-def _best(cal: Protocol, norm: str) -> Tuple[str, dict]:
-    """(architecture, selected values) of the best calibrated arm with `norm`."""
+def calibrated() -> tuple:
+    """The arguments of every arm: the best calibrated architecture and its settings."""
+    cal = calibration()
     scored = []
     for arch in SETTINGS["architectures"]:
-        sel = cal.selection(f"central_spdnet_{arch_name(arch)}_{norm}")
+        sel = cal.selection(f"central_spdnet_{arch_name(arch)}_bn")
         scored.append((sel["mean"], arch, sel["hp"]))
     _, arch, hp = max(scored, key=lambda t: t[0])
-    return arch, hp
-
-
-def calibrated() -> Tuple[tuple, tuple]:
-    """(arguments without batch norm, arguments with batch norm) of every arm."""
-    cal = calibration()
-    arch, hp = _best(cal, "nobn")
-    nobn = arch_args(arch) + ("--reeig-percentile", f"{hp['--reeig-percentile']:g}")
-    arch, hp = _best(cal, "bn")
-    bn = arch_args(arch) + BN + ("--reeig-percentile", f"{hp['--reeig-percentile']:g}",
-                                 "--bn-momentum", f"{hp['--bn-momentum']:g}")
-    return nobn, bn
+    return arch_args(arch) + BN + ("--reeig-percentile", f"{hp['--reeig-percentile']:g}",
+                                   "--bn-momentum", f"{hp['--bn-momentum']:g}")
 
 
 def study() -> Protocol:
     """The Protocol of the study, with the calibrated settings."""
-    nobn, bn = calibrated()
+    bn = calibrated()
     shared_bn = bn + ("--no-fedbn",)
     return Protocol(
         dataset=DATASET,
@@ -92,10 +82,8 @@ def study() -> Protocol:
         model_args={"spdnet": TRAINING},
         kinds=("central", "fed_shared", "fed_fedper", "fed_local"),
         variants={
-            "nobn": Variant(args=nobn),
             "bn": Variant(args=bn),
             "bnshared": Variant(args=shared_bn, kinds=FEDERATED),
-            "iid_nobn": Variant(args=IID + nobn, kinds=WITH_CLIENTS),
             "iid_bn": Variant(args=IID + bn, kinds=WITH_CLIENTS),
             "iid_bnshared": Variant(args=IID + shared_bn, kinds=FEDERATED),
         },

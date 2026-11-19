@@ -1,13 +1,14 @@
-"""Step 2 of the batch-norm study for EEGNet: the 18 arms of mi_spdnet_bn, with EEGNet.
+"""Step 2 of the batch-norm study for EEGNet: the 11 arms of mi_spdnet_bn, with EEGNet.
 
 Same factors, tuning, selection and seeds as mi_spdnet_bn, on the same dataset
 (RFL_DATASET):
 
-    normalisation   none | BatchNorm kept on each client (FedBN) | shared BatchNorm
+    normalisation   BatchNorm kept on each client (FedBN) | shared BatchNorm
     scope           shared head | personal head (FedPer) | local only
     clients         one subject per client | IID clients
 
-plus the centralised reference with and without batch norm. Plain SGD trained to
+plus the centralised reference. EEGNet keeps the BatchNorm of its original
+architecture. Plain SGD trained to
 convergence, and FedAvg for the federated arms (EEGNet has no Stiefel weights). The momentum of the BatchNorm comes
 from mi_eegnet_bn_calib. As in the SPDNet study, the running statistics used at
 evaluation are the momentum averages of training (no --bn-recalibrate). The shared
@@ -24,16 +25,16 @@ weights, as FedAvg does.
         $RFL_RESULTS/mi_BNCI2014_001_bn_eegnet/final \\
         --by model clients scope arch --metric client_mean_acc
 
-Runs per dataset: 648 + 180, plus the extensions.
+Runs per dataset: 396 + 110, plus the extensions.
 
 Arms, named <arm kind>_<variant>:
 
-    central_eegnet_{nobn,bn}
-    fed_eegnet_fedavg_{shared,fedper}_{nobn,bn,bnshared,iid_nobn,iid_bn,iid_bnshared}
-    fed_eegnet_local_{nobn,bn,iid_nobn,iid_bn}
+    central_eegnet_bn
+    fed_eegnet_fedavg_{shared,fedper}_{bn,bnshared,iid_bn,iid_bnshared}
+    fed_eegnet_local_{bn,iid_bn}
 """
 
-from rfl.experiments.plans.mi_eegnet_bn_calib import BN, NOBN, TRAINING, calibration
+from rfl.experiments.plans.mi_eegnet_bn_calib import BN, TRAINING, calibration
 from rfl.experiments.plans.mi_spdnet_bn import FEDERATED, IID, WITH_CLIENTS
 from rfl.experiments.plans.mi_spdnet_bn import EXTEND as _EXTEND
 from rfl.experiments.plans.mi_spdnet_bn_calib import (BUDGET, DATASET, FINAL_SEEDS, LR,
@@ -61,10 +62,8 @@ def study() -> Protocol:
         model_args={"eegnet": TRAINING},
         kinds=("central", "fed_shared", "fed_fedper", "fed_local"),
         variants={
-            "nobn": Variant(args=NOBN),
             "bn": Variant(args=bn),
             "bnshared": Variant(args=shared_bn, kinds=FEDERATED),
-            "iid_nobn": Variant(args=IID + NOBN, kinds=WITH_CLIENTS),
             "iid_bn": Variant(args=IID + bn, kinds=WITH_CLIENTS),
             "iid_bnshared": Variant(args=IID + shared_bn, kinds=FEDERATED),
         },

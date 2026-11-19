@@ -8,7 +8,7 @@ seeds: stage 1 tunes the learning rate and the batch size (momentum 0.1), stage 
 momentum. The study (mi_eegnet_bn) then fixes it for every arm with batch norm.
 
 EEGNet has no ReEig and no architecture to choose, so there is no floors step and no
-calibration without batch norm. Every other setting is the one of the SPDNet study:
+calibration without batch norm (EEGNet keeps its BatchNorm). Every other setting is the one of the SPDNet study:
 plain SGD trained to convergence (SCHEDULE), the same learning-rate, batch and momentum
 grids, the same seeds and the same grid extensions.
 
@@ -23,7 +23,6 @@ from rfl.experiments.plans.mi_spdnet_bn_calib import (
 from rfl.experiments.protocol import Protocol, Variant
 
 TRAINING = ("--optimizer", "sgd") + SCHEDULE  # as SPDNet, without the BiMap weights
-NOBN = ("--eegnet-norm-type", "none")
 BN = ("--eegnet-norm-type", "batch")         # BatchNorm2d, FedBN (the default)
 EXTEND = EXTEND                              # the rules of mi_spdnet_bn_calib
 
