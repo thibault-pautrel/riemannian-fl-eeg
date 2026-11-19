@@ -415,6 +415,9 @@ class Protocol:
                 f"been extended after the selection): finish them, then run "
                 f"`--stage {last} --select` again before the final stage.")
         sel_file = selection_path(self.name, last)
+        if not sel_file.exists():
+            raise SystemExit(f"{last} is not selected yet: rerun its failed jobs, then "
+                             f"`--stage {last} --select` (the DAG does both).")
         newest = max(((j.save_dir / RESULT_FILES[j.entry]).stat().st_mtime
                       for j in stage_jobs if j.state() == "done"), default=0.0)
         if sel_file.stat().st_mtime < newest:

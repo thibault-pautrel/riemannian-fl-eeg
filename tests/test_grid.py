@@ -436,6 +436,8 @@ def test_final_refuses_a_selection_older_than_the_sweep(root):
     for j in jobs:
         j.stage, j.plan = "sweep", P.name
         _fake_result(j, 0.5)
+    with pytest.raises(SystemExit, match="not selected yet"):     # run, not selected
+        P.final()
     sel = G.select(jobs)
     G.selection_path(P.name).parent.mkdir(parents=True, exist_ok=True)
     G.selection_path(P.name).write_text(json.dumps(sel))
