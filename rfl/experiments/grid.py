@@ -198,7 +198,8 @@ class Job:
         """
         d = self.save_dir
         rec = d / "job_args"
-        if rec.exists() and rec.read_text().strip() != self.command():
+        recorded = rec.read_text().strip() if rec.exists() else ""
+        if recorded and recorded != self.command():     # empty: written on a full disk
             return "conflict"
         code = d / "exit_code"
         rc = code.read_text().strip() if code.exists() else None

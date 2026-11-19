@@ -425,6 +425,16 @@ def test_run_one_reruns_a_folder_whose_last_run_failed(tmp_path):
     assert "SKIP" not in r.stdout and r.returncode != 0
 
 
+def test_an_empty_job_record_is_no_conflict(root):
+    """A job_args left empty by a full disk does not block the plan."""
+    j = G.plan_jobs("smoke", None)[0]
+    j.save_dir.mkdir(parents=True)
+    (j.save_dir / "job_args").write_text("")
+    assert j.state() == "pending"
+    (j.save_dir / "job_args").write_text("fed --other")
+    assert j.state() == "conflict"
+
+
 def test_final_refuses_a_selection_older_than_the_sweep(root):
     """The grid was extended after the selection: final waits for a new selection."""
     from rfl.experiments.protocol import Protocol

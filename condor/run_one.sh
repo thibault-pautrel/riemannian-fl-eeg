@@ -34,7 +34,7 @@ case "$ENTRY" in
 esac
 
 COMMAND="$ENTRY $*"
-if [ -z "${FORCE:-}" ] && [ -f "$SAVE_DIR/job_args" ] \
+if [ -z "${FORCE:-}" ] && [ -s "$SAVE_DIR/job_args" ] \
         && [ "$(cat "$SAVE_DIR/job_args")" != "$COMMAND" ]; then
     echo "FATAL: $SAVE_DIR holds a run of another command (job_args). FORCE=1 overwrites it." >&2
     exit 4
