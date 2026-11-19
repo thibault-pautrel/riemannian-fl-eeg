@@ -16,10 +16,6 @@
 \caption{Batch-norm study, SPDNet, subject clients: test accuracy of each subject (\%). Best mean of each row in bold.}
 \resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\input{tab_bn_clients_spdnet}}
 \end{table}
-\begin{table}[htbp]\centering
-\caption{Batch-norm study, EEGNet, subject clients: test accuracy of each subject (\%). Best mean of each row in bold.}
-\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\input{tab_bn_clients_eegnet}}
-\end{table}
 \begin{figure}[htbp]\centering
 \input{fig_bn_rounds}
 \caption{Batch-norm study, subject clients: client mean test accuracy against the communication round, mean over the seeds. A seed that stopped keeps its last value.}
@@ -30,9 +26,5 @@
 \caption{Data quantity (every subject has $N$ trials per class): client mean test accuracy (\%). Best mean of each column and block in bold.}
 \resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\input{tab_datasize}}
 \end{table}
-\begin{figure}[htbp]\centering
-\input{fig_datasize}
-\caption{Data quantity: client mean test accuracy against $N$, mean and standard error over the seeds.}
-\end{figure}
 \clearpage
 \end{document}
