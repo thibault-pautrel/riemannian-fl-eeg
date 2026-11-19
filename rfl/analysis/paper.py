@@ -16,8 +16,9 @@ _datasize, _datasize_eegnet, _datasize_tslr) and writes, for the studies that ha
 Accuracies are in %. Tables: mean ± standard deviation over the seeds, best mean in bold
 (per row and network for the batch norm, per column and block for the data quantity), the
 number of seeds in brackets when some are missing (diverged runs, left out). Figures:
-mean over the seeds, with the standard error as error bars. "Shared head, re-fitted" is
-the shared-head arm after each client re-fits its head. A centralised model is scored on
+mean over the seeds, with the standard error as error bars. A shared head is reported as
+trained: a head re-fitted by each client after training, if any, is left out. A
+centralised model is scored on
 the pooled test trials.
 
 Each tab_/fig_ file holds a bare `tabular` or `tikzpicture`, to \\input in a table or
@@ -44,13 +45,12 @@ from rfl.analysis.tikz import grid_figure
 
 MODELS = {"spdnet": "SPDNet", "eegnet": "EEGNet"}
 HEADS = {"local": "Local", "fedper": "FedPer", "shared": "Shared head",
-         "refit": "Shared head, re-fitted", "central": "Centralised"}
+         "central": "Centralised"}
 NORMS = {"nobn": "no BN", "bn": "BN (FedBN)", "shared": "shared BN"}
 # Colour: paradigm and head. Line and mark: normalisation.
 COLOURS = {"rflTslr": "52514E", "rflPooled": "A3A29C", "rflLocal": "EB6834",
-           "rflRefit": "EDA100", "rflShared": "2A78D6", "rflFedper": "1BAF7A"}
-HEAD_COLOUR = {"local": "rflLocal", "fedper": "rflFedper", "shared": "rflShared",
-               "refit": "rflRefit"}
+           "rflShared": "2A78D6", "rflFedper": "1BAF7A"}
+HEAD_COLOUR = {"local": "rflLocal", "fedper": "rflFedper", "shared": "rflShared"}
 NORM_LINE = {"bn": ("solid", "*"), "shared": ("dashed", "square*"),
              "nobn": ("densely dotted", "triangle*"), "": ("solid", "diamond*")}
 
@@ -115,12 +115,8 @@ def bn_cells(df: pd.DataFrame) -> pd.DataFrame:
         if r.kind == "centralized":
             rows.append((r.model, "central", "central", norm, r.seed, r.test_acc))
             continue
-        scope = str(r.scope)
-        rows.append((r.model, r.clients, scope.replace("+refit", ""), norm, r.seed,
+        rows.append((r.model, r.clients, str(r.scope).replace("+refit", ""), norm, r.seed,
                      r.client_mean_acc))
-        if scope.endswith("+refit"):
-            rows.append((r.model, r.clients, "refit", norm, r.seed,
-                         r.reduced_refit_test_acc))
     t = pd.DataFrame(rows, columns=["model", "clients", "head", "norm", "seed", "acc"])
     t = t.dropna(subset=["acc"])
     t["acc"] *= 100
@@ -142,7 +138,7 @@ def bn_table(cells: pd.DataFrame) -> List[str]:
                      for i in range(len(models))),
              "Clients & Head & " + " & ".join([NORMS[n] for n in norms] * len(models))
              + " \\\\", "\\midrule"]
-    groups = [(c, [h for h in ("local", "fedper", "shared", "refit")])
+    groups = [(c, ["local", "fedper", "shared"])
               for c in ("subject", "iid") if c in set(cells.clients)]
     if "central" in set(cells.clients):
         groups.append(("central", ["central"]))
@@ -174,17 +170,13 @@ def client_details(df: pd.DataFrame) -> pd.DataFrame:
             res = json.load(f)
         subjects = (res.get("fl_info") or {}).get("client_subjects") or []
         acc = (res.get("final_metrics") or {}).get("per_client_test_acc") or []
-        refit = (res.get("personalized_metrics") or {}).get(
-            "personalized_per_client_test_acc") or []
         for i, a in enumerate(acc):
             s = subjects[i] if i < len(subjects) else []
             rows.append({"arm": r.arm, "model": r.model, "arch": r.arch,
                          "clients": r.clients, "scope": r.scope,
                          "n_per_class": r.n_per_class, "seed": r.seed, "client": i,
                          "subjects": "+".join(str(x) for x in s),
-                         "test_acc": 100 * a if a is not None else math.nan,
-                         "refit_test_acc": (100 * refit[i] if i < len(refit)
-                                            and refit[i] is not None else math.nan)})
+                         "test_acc": 100 * a if a is not None else math.nan})
     return pd.DataFrame(rows)
 
 
@@ -195,21 +187,14 @@ def client_table(det: pd.DataFrame, model: str) -> Optional[List[str]]:
         return None
     d["norm"] = d.arch.map(norm_of)
     d["base"] = d.scope.str.replace("+refit", "", regex=False)
-    cols = [("local", "nobn"), ("local", "bn"), ("fedper", "nobn"), ("fedper", "bn"),
-            ("fedper", "shared"), ("refit", "nobn"), ("refit", "bn"), ("refit", "shared")]
-
-    def acc_of(head: str, norm: str) -> pd.DataFrame:
-        if head == "refit":
-            sel = d[(d.base == "shared") & d.scope.str.endswith("+refit") & (d.norm == norm)]
-            return sel.assign(acc=sel.refit_test_acc)
-        sel = d[(d.base == head) & (d.norm == norm)]
-        return sel.assign(acc=sel.test_acc)
-
-    per = {c: acc_of(*c) for c in cols}
+    cols = [(h, n) for h in ("local", "fedper", "shared") for n in NORMS
+            if not (h == "local" and n == "shared")]
+    per = {(h, n): d[(d.base == h) & (d.norm == n)].assign(acc=lambda x: x.test_acc)
+           for h, n in cols}
     cols = [c for c in cols if not per[c].empty]
     subjects = sorted(set(d.subjects), key=lambda s: [int(x) for x in s.split("+") if x])
     n_max = int(max(per[c].groupby("subjects").acc.count().max() for c in cols))
-    spans = [(h, sum(1 for c in cols if c[0] == h)) for h in ("local", "fedper", "refit")]
+    spans = [(h, sum(1 for c in cols if c[0] == h)) for h in ("local", "fedper", "shared")]
     spans = [(h, k) for h, k in spans if k]
     head = ["Subject"] + [f"\\multicolumn{{{k}}}{{c}}{{{HEADS[h]}}}" for h, k in spans]
     rules, start = [], 2
@@ -311,13 +296,14 @@ def _datasize_rows(df: pd.DataFrame) -> pd.DataFrame:
         return "refit" if "re-fitted" in f else "shared" if "shared head" in f else "fedper"
 
     t["head"] = t.family.map(head)
+    t = t[t["head"] != "refit"]                 # the shared head is reported as trained
     t["normkey"] = t.norm.map({"": "", "BN": "bn", "FedBN": "bn", "shared BN": "shared",
                                "no BN": "nobn"})
     return t
 
 
 DS_HEADS = {"tslr": "Local", "pooled": "Pooled re-centred", "local": "Local",
-            "fedper": "FedPer", "shared": "Shared head", "refit": "Shared head, re-fitted"}
+            "fedper": "FedPer", "shared": "Shared head"}
 DS_COLOUR = {"tslr": "rflTslr", "pooled": "rflPooled", **HEAD_COLOUR}
 NORM_ORDER = ["", "nobn", "bn", "shared"]
 

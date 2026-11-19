@@ -82,7 +82,8 @@ def test_paper_writes_every_table_and_figure(tmp_path):
     doc = (out / "results.tex").read_text()
     assert doc.count("\\input{") == 6 and "\\section{Data quantity}" in doc
     bn = (out / "tab_bn.tex").read_text()
-    assert "Shared head, re-fitted" in bn and "Centralised" in bn and "\\mathbf" in bn
+    assert "Shared head &" in bn and "re-fitted" not in bn
+    assert "Centralised" in bn and "\\mathbf" in bn
     per = (out / "tab_bn_clients_spdnet.tex").read_text()
     assert all(f"\n{s} &" in per for s in SUBJECTS) and "Mean &" in per
     ds = (out / "tab_datasize.tex").read_text()
