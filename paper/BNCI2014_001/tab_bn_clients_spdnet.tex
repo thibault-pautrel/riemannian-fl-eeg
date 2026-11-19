@@ -1,19 +1,19 @@
-\begin{tabular}{lcccccccc}
+\begin{tabular}{lccccc}
 \toprule
-Subject & \multicolumn{2}{c}{Local} & \multicolumn{3}{c}{FedPer} & \multicolumn{3}{c}{Shared head, re-fitted} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-6}\cmidrule(lr){7-9}
- & no BN & BN (FedBN) & no BN & BN (FedBN) & shared BN & no BN & BN (FedBN) & shared BN \\
+Subject & \multicolumn{1}{c}{Local} & \multicolumn{2}{c}{FedPer} & \multicolumn{2}{c}{Shared head, re-fitted} \\
+\cmidrule(lr){2-2}\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+ & BN (FedBN) & BN (FedBN) & shared BN & BN (FedBN) & shared BN \\
 \midrule
-1 & $80.4 \pm 4.6$ & $82.2 \pm 3.3$ & $80.6 \pm 3.8$ & $\mathbf{85.1} \pm 2.2$ & $81.1 \pm 4.2$ & $73.3 \pm 4.6$ & $83.4 \pm 2.9$ & $82.0 \pm 3.1$ \\
-2 & $58.5 \pm 5.7$ & $61.8 \pm 5.8$ & $57.8 \pm 5.5$ & $59.5 \pm 6.7$ & $48.1 \pm 6.9$ & $40.7 \pm 8.5$ & $60.7 \pm 7.1$ & $\mathbf{62.4} \pm 4.7$ \\
-3 & $84.7 \pm 3.9$ & $\mathbf{88.0} \pm 3.6$ & $84.8 \pm 4.0$ & $87.6 \pm 3.7$ & $66.5 \pm 5.6$ & $80.7 \pm 8.7$ & $87.0 \pm 3.0$ & $87.3 \pm 3.0$ \\
-4 & $61.1 \pm 3.9$ & $69.0 \pm 6.4$ & $66.0 \pm 4.6$ & $\mathbf{70.0} \pm 4.7$ & $56.4 \pm 6.0$ & $43.5 \pm 13.6$ & $68.2 \pm 4.4$ & $68.3 \pm 4.3$ \\
-5 & $47.6 \pm 3.1$ & $\mathbf{48.8} \pm 3.9$ & $47.3 \pm 3.2$ & $46.9 \pm 5.1$ & $32.5 \pm 4.5$ & $31.7 \pm 9.7$ & $46.3 \pm 4.6$ & $46.9 \pm 5.2$ \\
-6 & $48.3 \pm 5.3$ & $\mathbf{62.0} \pm 5.0$ & $52.1 \pm 5.1$ & $60.7 \pm 4.0$ & $40.8 \pm 7.9$ & $37.2 \pm 11.0$ & $58.5 \pm 6.7$ & $58.6 \pm 4.4$ \\
-7 & $80.4 \pm 4.2$ & $84.3 \pm 3.8$ & $80.4 \pm 5.3$ & $\mathbf{84.8} \pm 2.9$ & $75.0 \pm 4.6$ & $68.8 \pm 8.3$ & $82.9 \pm 3.0$ & $83.4 \pm 2.9$ \\
-8 & $78.0 \pm 3.9$ & $\mathbf{86.8} \pm 2.6$ & $78.4 \pm 4.3$ & $84.8 \pm 3.3$ & $57.8 \pm 6.7$ & $72.3 \pm 8.6$ & $83.1 \pm 4.3$ & $83.3 \pm 3.1$ \\
-9 & $71.8 \pm 4.5$ & $\mathbf{79.1} \pm 3.5$ & $71.0 \pm 4.1$ & $76.5 \pm 2.9$ & $37.6 \pm 6.5$ & $71.3 \pm 8.5$ & $78.3 \pm 4.9$ & $76.2 \pm 6.1$ \\
+1 & $82.4 \pm 4.3$ & $81.5 \pm 3.9$ & $75.5 \pm 4.4$ & $\mathbf{83.2} \pm 3.0$ & $78.8 \pm 4.4$ \\
+2 & $60.2 \pm 6.7$ & $\mathbf{62.3} \pm 6.4$ & $42.1 \pm 8.8$ & $57.7 \pm 9.5$ & $53.8 \pm 9.1$ \\
+3 & $87.7 \pm 3.8$ & $\mathbf{87.9} \pm 4.5$ & $71.8 \pm 7.3$ & $87.3 \pm 3.0$ & $84.2 \pm 3.6$ \\
+4 & $\mathbf{69.3} \pm 6.4$ & $66.7 \pm 3.9$ & $51.6 \pm 9.1$ & $68.9 \pm 3.9$ & $57.3 \pm 8.8$ \\
+5 & $\mathbf{46.2} \pm 5.6$ & $45.5 \pm 5.0$ & $29.8 \pm 4.7$ & $46.0 \pm 6.0$ & $40.9 \pm 5.4$ \\
+6 & $\mathbf{61.3} \pm 3.8$ & $60.0 \pm 7.2$ & $38.9 \pm 12.1$ & $57.5 \pm 5.9$ & $52.1 \pm 6.2$ \\
+7 & $\mathbf{84.0} \pm 2.0$ & $83.5 \pm 3.0$ & $71.7 \pm 10.6$ & $83.8 \pm 3.0$ & $78.6 \pm 2.3$ \\
+8 & $84.3 \pm 3.0$ & $\mathbf{84.5} \pm 3.4$ & $60.3 \pm 6.2$ & $83.6 \pm 3.9$ & $79.9 \pm 2.1$ \\
+9 & $\mathbf{79.7} \pm 4.4$ & $78.7 \pm 3.9$ & $48.0 \pm 6.9$ & $78.3 \pm 4.4$ & $76.8 \pm 3.5$ \\
 \midrule
-Mean & $67.9 \pm 1.4$ & $\mathbf{73.5} \pm 1.1$ & $68.7 \pm 1.5$ & $72.9 \pm 1.6$ & $55.1 \pm 0.9$ & $57.7 \pm 2.6$ & $72.1 \pm 1.6$ & $72.0 \pm 1.6$ \\
+Mean & $\mathbf{72.8} \pm 1.1$ & $72.3 \pm 1.5$ & $54.4 \pm 3.1$ & $71.8 \pm 1.8$ & $66.9 \pm 2.0$ \\
 \bottomrule
 \end{tabular}
