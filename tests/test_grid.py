@@ -93,8 +93,9 @@ def test_select_refuses_unfinished_stages_and_test_metrics(root, monkeypatch):
 def test_plan_jobs_parse_with_their_runner(root, plan, stage, monkeypatch):
     if plan == "smoke":
         monkeypatch.setattr("rfl.experiments.plans.smoke.prepare", lambda: None, raising=False)
-    if plan == "mi_spdnet_bn_calib":
-        _write_floors("BNCI2014_001", ["16"])
+    if plan == "mi_spdnet_bn_calib":                # the dataset of RFL_DATASET
+        from rfl.experiments.plans.mi_spdnet_bn_calib import DATASET, STUDY
+        _write_floors(DATASET, STUDY[DATASET]["architectures"])
     jobs = G.plan_jobs(plan, stage)
     assert jobs and len({j.save_dir for j in jobs}) == len(jobs)
     for j in jobs:
