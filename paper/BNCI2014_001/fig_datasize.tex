@@ -1,0 +1,90 @@
+% Client mean test accuracy against the trials per class and subject (scenario U), mean and standard error over the seeds.
+% Needs \usepackage{pgfplots} and \usepgfplotslibrary{groupplots}.
+\providecolor{C0}{HTML}{1B6CA8}
+\providecolor{C1}{HTML}{E1701A}
+\providecolor{C2}{HTML}{2C8B57}
+\providecolor{C3}{HTML}{A02C2C}
+\providecolor{C7}{HTML}{444444}
+\providecolor{rflTslr}{HTML}{52514E}
+\providecolor{rflPooled}{HTML}{A3A29C}
+\providecolor{rflLocal}{HTML}{EB6834}
+\providecolor{rflShared}{HTML}{2A78D6}
+\providecolor{rflFedper}{HTML}{1BAF7A}
+\begin{tikzpicture}
+\begin{groupplot}[
+  group style={group size=1 by 1, horizontal sep=1.6cm, vertical sep=1.9cm},
+  width=0.47\linewidth, height=4.4cm,
+  tick label style={font=\scriptsize}, label style={font=\small},
+  title style={font=\small},
+  grid=major, grid style={black!10},
+  legend style={font=\small, draw=none, legend columns=4, column sep=1.2ex},
+  legend cell align=left,
+]
+\nextgroupplot[title={SPDNet}, xlabel={trials per class and subject}, ylabel={test accuracy (\%)}, ymin=35, ymax=75, xtick={5,10,20,40,80}, xticklabels={5,10,20,40,all}, minor xtick={}, xmode=log, ymode=linear, xmin=3.84615, xmax=104, legend to name=datasizelegend]
+\addplot+[rflFedper, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,49.2817) += (0,0.772432) -= (0,0.772432)
+  (10,55.8166) += (0,0.556909) -= (0,0.556909)
+  (20,61.4255) += (0,0.563967) -= (0,0.563967)
+  (40,66.5448) += (0,0.543877) -= (0,0.543877)
+  (80,72.3591) += (0,0.55067) -= (0,0.55067)
+};
+\addplot+[rflFedper, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,37.1661) += (0,0.582476) -= (0,0.582476)
+  (10,44.0024) += (0,0.913385) -= (0,0.913385)
+  (20,48.5476) += (0,0.608115) -= (0,0.608115)
+  (40,50.9342) += (0,0.970097) -= (0,0.970097)
+  (80,54.2878) += (0,0.500786) -= (0,0.500786)
+};
+\addplot+[rflLocal, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,45.3564) += (0,0.4725) -= (0,0.4725)
+  (10,54.4409) += (0,0.763369) -= (0,0.763369)
+  (20,60.897) += (0,0.617485) -= (0,0.617485)
+  (40,67.4149) += (0,0.725785) -= (0,0.725785)
+  (80,73.3092) += (0,0.406921) -= (0,0.406921)
+};
+\addplot+[rflPooled, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,47.9922) += (0,0.602156) -= (0,0.602156)
+  (10,51.8495) += (0,1.04798) -= (0,1.04798)
+  (20,56.8822) += (0,0.833362) -= (0,0.833362)
+  (40,60.0414) += (0,0.582463) -= (0,0.582463)
+  (80,63.6353) += (0,0.431954) -= (0,0.431954)
+};
+\addplot+[rflShared, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,50.7607) += (0,0.520606) -= (0,0.520606)
+  (10,54.2128) += (0,0.57148) -= (0,0.57148)
+  (20,57.1652) += (0,0.559486) -= (0,0.559486)
+  (40,59.2325) += (0,0.512779) -= (0,0.512779)
+  (80,60.9445) += (0,0.480601) -= (0,0.480601)
+};
+\addplot+[rflShared, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,37.3961) += (0,0.84383) -= (0,0.84383)
+  (10,38.9967) += (0,0.737495) -= (0,0.737495)
+  (20,40.1599) += (0,0.835164) -= (0,0.835164)
+  (40,41.7678) += (0,0.648644) -= (0,0.648644)
+  (80,42.0585) += (0,0.542279) -= (0,0.542279)
+};
+\addplot+[rflTslr, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,48.1357) += (0,1.35448) -= (0,1.35448)
+  (10,57.3265) += (0,0.828348) -= (0,0.828348)
+  (20,62.8048) += (0,0.702262) -= (0,0.702262)
+  (40,68.0747) += (0,0.74776) -= (0,0.74776)
+  (80,74.3064) += (0,0.488234) -= (0,0.488234)
+};
+\addlegendimage{rflTslr, line width=2pt}
+\addlegendentry{TS+LR, local}
+\addlegendimage{rflPooled, line width=2pt}
+\addlegendentry{TS+LR, pooled re-centred}
+\addlegendimage{rflLocal, line width=2pt}
+\addlegendentry{Local}
+\addlegendimage{rflFedper, line width=2pt}
+\addlegendentry{FedPer}
+\addlegendimage{rflShared, line width=2pt}
+\addlegendentry{Shared head}
+\addlegendimage{black!70, thick, solid, mark=*, mark options={solid}}
+\addlegendentry{BN (FedBN)}
+\addlegendimage{black!70, thick, dashed, mark=square*, mark options={solid}}
+\addlegendentry{shared BN}
+\end{groupplot}
+\path (group c1r1.outer south) -- (group c1r1.outer south)
+  node[midway, anchor=north, yshift=-3pt] {\pgfplotslegendfromname{datasizelegend}};
+\end{tikzpicture}
