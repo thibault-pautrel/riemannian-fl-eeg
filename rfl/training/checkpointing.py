@@ -1,5 +1,6 @@
 """Checkpoint saving, loading and resuming for the centralised training loop."""
 
+import copy
 import logging
 import os
 import random
@@ -19,7 +20,9 @@ class CheckpointManager:
 
     Files are written to `checkpoint_dir` as `<run_name>_best.pt` (the selected
     epoch) and `<run_name>_epoch_<k>.pt` (periodic checkpoints). Each file holds the
-    epoch, model and optimiser state dicts, metrics, history and config.
+    epoch, model and optimiser state dicts, metrics, history and config. The best model
+    of this process is also kept in memory, so that `load_best` still works when the
+    files were deleted during the run.
 
     Args:
         checkpoint_dir: Output directory (created if needed).
@@ -39,6 +42,7 @@ class CheckpointManager:
         self.run_name = run_name
         self.config = config
         self.keep_last_n = keep_last_n
+        self._best: Optional[Dict[str, Any]] = None
 
         os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -95,6 +99,8 @@ class CheckpointManager:
         if is_best:
             save_path = os.path.join(self.checkpoint_dir, f'{self.run_name}_best.pt')
             torch.save(checkpoint, save_path)
+            self._best = {'epoch': epoch,
+                          'model_state_dict': copy.deepcopy(checkpoint['model_state_dict'])}
         return save_path
 
     def _config_hash(self):
@@ -122,18 +128,22 @@ class CheckpointManager:
     ) -> Dict[str, Any]:
         """Load the best checkpoint into `model` (and `optimizer` if given).
 
+        The best model saved by this process comes from memory. The file is read when
+        there is none (a resumed run whose best epoch came before the resumption) or
+        when the optimiser state is asked for.
+
         Returns:
             The checkpoint dict.
 
         Raises:
             FileNotFoundError: If no best checkpoint exists.
         """
-        checkpoint_path = os.path.join(self.checkpoint_dir, f'{self.run_name}_best.pt')
-
-        if not os.path.exists(checkpoint_path):
-            raise FileNotFoundError(f"Best checkpoint not found: {checkpoint_path}")
-
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        checkpoint = self._best
+        if checkpoint is None or optimizer is not None:
+            checkpoint_path = os.path.join(self.checkpoint_dir, f'{self.run_name}_best.pt')
+            if not os.path.exists(checkpoint_path):
+                raise FileNotFoundError(f"Best checkpoint not found: {checkpoint_path}")
+            checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         if optimizer is not None and 'optimizer_state_dict' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

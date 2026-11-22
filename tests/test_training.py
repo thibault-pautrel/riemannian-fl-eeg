@@ -160,6 +160,19 @@ def test_checkpoint_without_files(tmp_path):
         ckpt.load_best(nn.Linear(2, 2))
 
 
+def test_best_model_survives_deleted_files(tmp_path):
+    """The best model of the run comes from memory when its files were deleted."""
+    ckpt = CheckpointManager(str(tmp_path), "r", _cfg())
+    m = nn.Linear(2, 2)
+    best = {k: v.clone() for k, v in m.state_dict().items()}
+    ckpt.save(m, torch.optim.SGD(m.parameters(), lr=0.1), 3, {}, {"epoch": [3]}, is_best=True)
+    with torch.no_grad():
+        m.weight.add_(1.0)                      # training goes on after the best epoch
+    for f in tmp_path.glob("*.pt"):
+        f.unlink()
+    assert ckpt.load_best(m)["epoch"] == 3
+    assert all(torch.equal(m.state_dict()[k], v) for k, v in best.items())
+
 # ---- evaluation -------------------------------------------------------------------
 def test_evaluator_metrics_and_saving(tmp_path):
     model = nn.Linear(5, 2)
