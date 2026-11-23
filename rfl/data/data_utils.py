@@ -417,6 +417,21 @@ def filter_binary_task(
     return X, y, meta
 
 
+def split_indices(y: np.ndarray, val_size: float, test_size: float,
+                  seed: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(train, val, test) indices of the stratified split shared by every runner.
+
+    The test set is drawn first, then the validation set from the rest, both stratified
+    by label and seeded by `seed`: the split of `create_splits(split_type='random')`.
+    """
+    indices = np.arange(len(y))
+    train_val, test = train_test_split(indices, test_size=test_size, random_state=seed,
+                                       stratify=y)
+    train, val = train_test_split(train_val, test_size=val_size / (1.0 - test_size),
+                                  random_state=seed, stratify=y[train_val])
+    return train, val, test
+
+
 def create_splits(
     X: np.ndarray,
     y: np.ndarray,

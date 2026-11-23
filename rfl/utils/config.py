@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Defaults of the inter-subject fields, left out of to_dict (see there).
+TARGET_DEFAULTS = {"target_subjects": [], "target_role": "adapt", "target_ns": []}
+
 
 @dataclass
 class ExperimentConfig:
@@ -85,6 +88,18 @@ class ExperimentConfig:
     calibration_val_fraction: float = 0.2      # share of the N trials for validation
     calibration_order: str = 'random'          # 'random' | 'chronological'
     reduced_subjects: int = 0                  # reduce K subjects only (0: all)
+
+    # ==================== Inter-subject protocol (rfl/experiments/loso.py) ===========
+    # Target subjects of a leave-subjects-out fold. Empty: the within-subject protocol.
+    # The split is that of all `subjects`, then the targets are set apart.
+    target_subjects: List[int] = field(default_factory=list)
+    # 'adapt': the targets never train. After training, the reported model is adapted
+    # to each target and scored on its test trials (target_ns). 'local': the targets
+    # are the only clients (the local-from-scratch reference, with
+    # train_trials_per_class and local-only training).
+    target_role: str = 'adapt'
+    # Calibration trials per class of the target adaptation (0: unlabeled trials only).
+    target_ns: List[int] = field(default_factory=list)
 
     # ==================== Model ====================
     model_type: str = 'spdnet'          # 'spdnet' | 'eegnet'
@@ -296,6 +311,8 @@ class ExperimentConfig:
             raise ValueError("val_size + test_size must leave a non-empty training split")
         from rfl.data import reduction
         reduction.validate(self)
+        from rfl.experiments.loso import validate as validate_targets
+        validate_targets(self)
         if self.spdnet_bn_recalibrate and not self.has_batch_norm():
             raise ValueError("spdnet_bn_recalibrate needs a batch norm: SPDNet with "
                              "spdnet_use_batch_norm, or EEGNet with eegnet_norm_type "
@@ -407,8 +424,16 @@ class ExperimentConfig:
             json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[:8]
 
     def to_dict(self) -> Dict[str, Any]:
-        """All dataclass fields as a dict."""
-        return asdict(self)
+        """All dataclass fields as a dict.
+
+        The inter-subject fields are left out at their defaults, so that the hash and
+        the config.json of a within-subject run are those of the code before them.
+        """
+        d = asdict(self)
+        for key, default in TARGET_DEFAULTS.items():
+            if d.get(key) == default:
+                d.pop(key, None)
+        return d
 
     def get(self, key: str, default: Any = None) -> Any:
         """Dict-like attribute access with a default."""

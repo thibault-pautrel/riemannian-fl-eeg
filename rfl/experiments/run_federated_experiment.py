@@ -60,10 +60,11 @@ import torch.nn as nn
 
 
 from rfl.data.reduction import reduction_config
+from rfl.experiments.loso import target_config
 from rfl.data.registry import DATASET_CONFIGS, dataset_default
 from rfl.experiments.run_centralized_experiment import _spd_bn_config, warn_uncalibrated
 from rfl.federated.fl_config import FLConfig
-from rfl.federated.server import FLServer, create_fl_clients
+from rfl.federated.server import FLServer, create_fl_clients_and_targets
 from rfl.models.eegnet import create_eegnet
 from rfl.models.spdnet import create_spdnet, fix_batch_norm_dtype
 from rfl.utils.reproducibility import log_environment, set_seed
@@ -172,13 +173,14 @@ def run_federated_experiment(
     log_environment(save_dir)
 
     # ---- clients ------------------------------------------------------------
+    targets = []                     # inter-subject protocol (rfl/experiments/loso.py)
     if synthetic_clients is not None:
         from rfl.data.synthetic import load_clients
         from rfl.federated.server import create_fl_clients_synthetic
         clients = create_fl_clients_synthetic(
             load_clients(synthetic_clients), config, device, verbose=verbose)
     else:
-        clients = create_fl_clients(
+        clients, targets = create_fl_clients_and_targets(
             dataset_name=dataset_name,
             all_subjects=subjects,
             subjects_per_client=config.fl_subjects_per_client,
@@ -313,6 +315,16 @@ def run_federated_experiment(
                   f"{metrics_before_recalibration.get('global_val_acc', float('nan')):.4f}"
                   f" -> {final_metrics['global_val_acc']:.4f}")
 
+    # ---- new subjects (rfl/experiments/loso.py): the reported model, adapted ------
+    target_metrics = None
+    if targets and config.target_ns:
+        from rfl.experiments.loso import evaluate_targets, new_subject_model
+        weights = ([float(c.n_samples) for c in clients] if config.fl_weight_by_samples
+                   else [1.0] * len(clients))
+        target_metrics = evaluate_targets(
+            new_subject_model(clients, reported_state, weights), targets, config, device,
+            n_classes, shared_head=not config.fl_local_fc, verbose=verbose)
+
     # What each client holds for the reported model, before any re-fit changes its head.
     reported_clients = _client_snapshot(clients, full=config.fl_local_only)
 
@@ -362,6 +374,8 @@ def run_federated_experiment(
             "client_val_samples": [len(c.val_loader.dataset) for c in clients],
             "train_trials_per_class": config.train_trials_per_class,
             "reduced_clients": [c.client_id for c in clients if c.reduced],
+            "target_subjects": list(config.target_subjects),
+            "target_role": config.target_role,
         },
         "personalisation": config.personalisation_name(),
         "dp_budget": dp_budget,
@@ -370,6 +384,7 @@ def run_federated_experiment(
         "final_metrics_before_recalibration": metrics_before_recalibration,
         "personalized_metrics": personalized,
         "reeig_activity": reeig,
+        "target_metrics": target_metrics,
         "last_round_metrics": last_round_metrics,
         "selection": {
             "metric": sel_key,
@@ -552,6 +567,8 @@ def _build_arg_parser():
     g.add_argument("--cov-regularization", type=float, default=0.0)
     from rfl.data.reduction import add_reduction_args
     add_reduction_args(p)
+    from rfl.experiments.loso import add_target_args
+    add_target_args(p)
 
     # -- federation ------------------------------------------------------------
     g = p.add_argument_group("federation")
@@ -760,7 +777,7 @@ def config_from_args(args) -> FLConfig:
         data_type=data_type, task=args.task,
         resample=args.resample, fmin=args.fmin, fmax=args.fmax,
         val_size=args.val_size, test_size=args.test_size,
-        **reduction_config(args),
+        **reduction_config(args), **target_config(args),
         cov_estimator=args.cov_estimator, cov_shrinkage=args.cov_shrinkage,
         cov_regularization=args.cov_regularization,
         # federation

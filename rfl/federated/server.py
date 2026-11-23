@@ -763,6 +763,14 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
                                  subjects_per_client: int, config: Any,
                                  device: torch.device,
                                  verbose: bool = True) -> List[FLClient]:
+    """The clients of `create_fl_clients_and_targets`, without the targets."""
+    return create_fl_clients_and_targets(dataset_name, all_subjects, subjects_per_client,
+                                         config, device, verbose)[0]
+
+
+def create_fl_clients_and_targets(dataset_name: str, all_subjects: List[int],
+                                  subjects_per_client: int, config: Any,
+                                  device: torch.device, verbose: bool = True):
     """Load a MOABB dataset and build one client per group of subjects.
 
     The data is loaded once and split once, stratified by label, with the
@@ -770,6 +778,10 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
     client that owns its subject, or, with config.fl_client_partition == 'iid', to a
     client drawn by `iid_partition` (the same number of clients). The union of the
     client splits is therefore the centralized split in both cases.
+
+    With config.target_subjects (rfl/experiments/loso.py), the split is the same. The
+    targets are then set apart: they become no client (target_role 'adapt') and their
+    trials are returned as `Target`s, or they are the only clients ('local').
 
     Args:
         dataset_name: MOABB dataset name (rfl/data/registry.py).
@@ -780,15 +792,17 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
         verbose: print the partition and split sizes.
 
     Returns:
-        The clients (FLClient, or DPFLClient under DP), with their data loaders.
+        (clients, targets): the clients (FLClient, or DPFLClient under DP) with their
+        data loaders, and the Targets (empty without target_subjects or with role
+        'local').
     """
-    from sklearn.model_selection import train_test_split
-
-    from rfl.data.data_utils import resolve_resample
+    from rfl.data.data_utils import resolve_resample, split_indices
     from rfl.data.reduction import reduce_pool, reduced_positions, subject_rng
+    from rfl.experiments.loso import members, split_targets
     from rfl.federated.fl_config import create_client_subject_mapping
 
-    client_subjects = create_client_subject_mapping(all_subjects, subjects_per_client)
+    client_subjects = create_client_subject_mapping(members(all_subjects, config),
+                                                    subjects_per_client)
     iid = config.fl_client_partition == 'iid'
     if verbose:
         logger.info(f"\n{'=' * 70}")
@@ -799,6 +813,9 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
         if not iid:
             for i, subs in enumerate(client_subjects):
                 logger.info(f"  Client {i}: subjects {subs}")
+        if config.target_subjects:
+            logger.info(f"  Target subjects ({config.target_role}): "
+                        f"{list(config.target_subjects)}")
 
     native_sfreq = DATASET_SAMPLING_RATES[dataset_name]
     target_sfreq = resolve_resample(config.resample, native_sfreq)
@@ -815,16 +832,9 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
         dataset_name=dataset_name, verbose=verbose)
 
     # ---- one global split, identical to the centralized one -------------------
-    val_size = float(config.val_size)
-    test_size = float(config.test_size)
     split_seed = int(config.data_split_seed)
-
-    indices = np.arange(len(y_all))
-    train_val_idx, test_idx = train_test_split(
-        indices, test_size=test_size, random_state=split_seed, stratify=y_all)
-    train_idx, val_idx = train_test_split(
-        train_val_idx, test_size=val_size / (1.0 - test_size),
-        random_state=split_seed, stratify=y_all[train_val_idx])
+    train_idx, val_idx, test_idx = split_indices(y_all, float(config.val_size),
+                                                 float(config.test_size), split_seed)
 
     train_set, val_set, test_set = set(train_idx), set(val_idx), set(test_idx)
     if verbose:
@@ -832,6 +842,15 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
               f"val={len(val_idx)} test={len(test_idx)} (matches centralized)")
 
     meta = meta_all.reset_index(drop=True)
+    targets = []
+    if config.target_subjects and config.target_role == 'adapt':
+        targets = split_targets(X_all, y_all, meta['subject'].to_numpy(), train_idx,
+                                val_idx, test_idx, all_subjects, config)
+        if verbose:
+            for t in targets:
+                logger.info(f"[Target] subject {t.subject}: pool={len(t.y_pool)} "
+                            f"test={len(t.y_test)} labeled per N: "
+                            f"{ {n: len(p) for n, p in t.labeled.items()} }")
     use_local_fc = bool(config.fl_local_fc)
     if iid:
         k = len(client_subjects)
@@ -901,7 +920,7 @@ def create_fl_clients_by_subject(dataset_name: str, all_subjects: List[int],
               f"test={sum(len(c.test_loader.dataset) for c in clients)} "
               f"(both match centralized)")
         logger.info(f"{'=' * 70}")
-    return clients
+    return clients, targets
 
 
 def create_fl_clients_synthetic(client_splits, config, device,

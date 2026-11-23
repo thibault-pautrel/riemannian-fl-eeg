@@ -844,3 +844,96 @@ def test_log_filter_drops_a_tensor_printed_after_a_progress_bar():
     assert out[:3] == ["\rEpoch 1 [Train]:   0%|  | 0/12 [00:00<?, ?it/s]\n",
                        "loss= kept\n", "Val - Loss: 1.2\n"]
     assert "removed 3 printed tensors" in out[3] and len(out) == 4
+
+@pytest.fixture
+def loso_plans(monkeypatch):
+    """The inter-subject plans, imported for one dataset."""
+    import importlib
+
+    import rfl.experiments.plans.mi_loso as spd
+    import rfl.experiments.plans.mi_loso_calib as calib
+    import rfl.experiments.plans.mi_loso_eegnet as eeg
+    import rfl.experiments.plans.mi_loso_eegnet_calib as eeg_calib
+    import rfl.experiments.plans.mi_loso_study as study
+    import rfl.experiments.plans.mi_loso_tslr as ts
+    import rfl.experiments.plans.mi_spdnet_bn_calib as bn_calib
+    mods = (bn_calib, calib, spd, eeg_calib, eeg, ts, study)
+
+    def load(dataset):
+        monkeypatch.setenv("RFL_DATASET", dataset)
+        for m in mods:
+            importlib.reload(m)
+    yield load
+    monkeypatch.delenv("RFL_DATASET", raising=False)
+    for m in mods:
+        importlib.reload(m)
+
+
+def _write_fold_floors(dataset, arch):
+    from rfl.experiments import loso
+    for k in range(len(loso.folds(dataset))):
+        _write_floors(dataset, [arch])
+        data = json.loads((G.results_root() / "reeig_floors" / f"{dataset}.json").read_text())
+        data["meta"]["exclude_subjects"] = loso.folds(dataset)[k]
+        dst = Path(loso.floors_path(dataset, k))
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(json.dumps(data))
+
+
+@pytest.mark.parametrize("dataset,n_folds,local_ns", [("BNCI2014_001", 9, (5, 10, 20)),
+                                                      ("PhysionetMI", 10, (3, 5, 10))])
+def test_inter_subject_study_tunes_every_fold_without_its_targets(root, loso_plans,
+                                                                  dataset, n_folds,
+                                                                  local_ns):
+    """Floors, calibration and tuning per fold; the targets in no training set; the
+    final source runs adapt to the targets, the local runs train the targets alone."""
+    from rfl.experiments import loso
+    from rfl.experiments.pipeline import steps
+    loso_plans(dataset)
+    folds = loso.folds(dataset)
+    with pytest.raises(SystemExit, match="no ReEig floors per fold"):
+        G.plan_jobs("mi_loso_calib", "sweep1")
+    _write_fold_floors(dataset, "16")
+    assert loso.floors_ready(dataset, ["16"])
+    stale = Path(loso.floors_path(dataset, 0))           # floors of other targets
+    data = json.loads(stale.read_text())
+    stale.write_text(json.dumps({**data, "meta": {"exclude_subjects": [999]}}))
+    assert not loso.floors_ready(dataset, ["16"])
+    _write_fold_floors(dataset, "16")
+    c1 = _run_stage("mi_loso_calib", "sweep1", 36 * n_folds)
+    assert {_parse(j).floors_file for j in c1} == {loso.floors_path(dataset, k)
+                                                   for k in range(n_folds)}
+    _run_stage("mi_loso_calib", "sweep2", 27 * n_folds)
+    s1 = _run_stage("mi_loso", "sweep1", (5 * 36 + 3 * 36) * n_folds)
+    assert not any(_parse(j).target_ns for j in s1)          # no target in a sweep
+    final = G.plan_jobs("mi_loso", "final")
+    assert len(final) == 8 * 10 * n_folds
+    G.check_jobs(final)
+    for j in final:
+        ns, k = _parse(j), int(j.arm.rsplit("_f", 1)[1])
+        assert ns.target_subjects == folds[k]
+        assert ns.bn_momentum == 0.3 and ns.reeig_percentile == 5
+        if "_local_" in j.arm:
+            assert ns.target_role == "local" and ns.local_only and not ns.target_ns
+            assert ns.train_trials_per_class in local_ns and ns.bn_recalibrate
+        else:
+            assert ns.target_ns == [0, *local_ns]
+            assert not getattr(ns, "head_refit_epochs", "")
+            if j.entry == "fed":
+                assert ns.fedbn == ("bnshared" not in j.arm)
+    assert [s for s in steps("mi_loso_study") if not hasattr(s, "argv")][-1] == \
+        ("mi_loso_tslr", "final")
+    ts = G.plan_jobs("mi_loso_tslr", "final")
+    assert len(ts) == 10 * n_folds
+    G.check_jobs(ts[:1])
+
+
+def test_inter_subject_eegnet_plans(root, loso_plans):
+    loso_plans("Weibo2014")
+    _run_stage("mi_loso_eegnet_calib", "sweep1", 36 * 10)
+    _run_stage("mi_loso_eegnet_calib", "sweep2", 9 * 10)
+    _run_stage("mi_loso_eegnet", "sweep1", (5 * 36 + 3 * 36) * 10)
+    final = G.plan_jobs("mi_loso_eegnet", "final")
+    assert len(final) == 80 * 10
+    G.check_jobs(final)
+    assert {_parse(j).model for j in final} == {"eegnet"}

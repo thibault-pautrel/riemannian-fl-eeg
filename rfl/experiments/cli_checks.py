@@ -88,6 +88,10 @@ RULES: List[Rule] = [
     (("fedbn",), _bn_layer,
      "needs a normalisation layer: --use-batch-norm (SPDNet) or "
      "--eegnet-norm-type batch (EEGNet)"),
+    (("target_role", "target_ns"), lambda a: bool(a.target_subjects),
+     "only acts with --target-subjects"),
+    (("target_ns",), lambda a: getattr(a, "target_role", "adapt") == "adapt",
+     "only acts with --target-role adapt"),
 ]
 
 
@@ -227,6 +231,8 @@ FIELD_FLAGS = {
     "spdnet_reeig_percentile": "--reeig-percentile",
     "optimizer": "--optimizer", "sgd_momentum": "--momentum",
     "fl_local_head_mode": "--local-head-mode", "fl_local_only": "--local-only",
+    "target_subjects": "--target-subjects", "target_role": "--target-role",
+    "target_ns": "--target-ns",
     "fl_head_refit_epochs": "--head-refit-epochs", "fl_head_refit_lr": "--head-refit-lr",
     "fl_head_refit_selection": "--head-refit-selection", "fl_fedbn": "--no-fedbn",
     "fl_client_fraction": "--client-fraction", "fl_rounds": "--rounds",

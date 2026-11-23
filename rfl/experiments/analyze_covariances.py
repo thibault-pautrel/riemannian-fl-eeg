@@ -280,6 +280,7 @@ def write_floors(dataset: str, covs: np.ndarray, architectures: List[str], args)
     meta = {"dataset": dataset, "percentiles": [float(q) for q in args.percentiles],
             "frame": "spectrum entering each ReEig, random Stiefel BiMaps (seed 0)",
             "trace_normalize": args.trace_normalize, "max_subjects": args.max_subjects,
+            "exclude_subjects": list(getattr(args, "exclude_subjects", [])),
             "max_samples": args.max_samples, "task": args.task,
             "estimator": args.estimator, "resample": args.resample,
             "generated": datetime.now().isoformat()}
@@ -380,6 +381,8 @@ def load_covariances(
 def analyze_one(dataset_name: str, args) -> Optional[Dict[str, Any]]:
     """Analyse one dataset and print a summary. Returns None if loading fails."""
     subjects = get_subjects(dataset_name)
+    if getattr(args, "exclude_subjects", None):          # the targets of a fold
+        subjects = [s for s in subjects if s not in set(args.exclude_subjects)]
     if args.max_subjects:                                # 0: every subject
         subjects = subjects[: args.max_subjects]
     print(f"\n{'='*78}\n{dataset_name}  (subjects: {subjects})\n{'='*78}")
@@ -558,7 +561,7 @@ def write_outputs(results: List[Dict[str, Any]], output_dir: str, meta: Dict[str
     print(f"\nWritten: {output_dir}/covariance_analysis.json and .txt")
 
 
-def main():
+def main(argv=None):
     from rfl.utils.logs import setup_logging
     setup_logging()
     p = argparse.ArgumentParser(
@@ -570,6 +573,9 @@ def main():
     p.add_argument("--max-subjects", type=int, default=5,
                    help="Use the first N subjects of each dataset (0: all). 5 is the "
                         "value the calibration of the paper's floors ran with.")
+    p.add_argument("--exclude-subjects", type=int, nargs="+", default=[],
+                   help="Subjects left out, before --max-subjects (the targets of an "
+                        "inter-subject fold, rfl/experiments/loso.py).")
     p.add_argument("--max-samples", type=int, default=2000,
                    help="Cap on the covariance matrices analysed per dataset, shared "
                         "equally between the subjects (random subsample).")
@@ -606,7 +612,7 @@ def main():
                    default=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6],
                    help="Epsilon values for the clamp-fraction table.")
     p.add_argument("--output-dir", type=str, default="results/covariance_analysis")
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     print(f"Analyzing {len(args.datasets)} dataset(s): {args.datasets}  "
           f"(frame: {'trace-normalized' if args.trace_normalize else 'raw'}, "

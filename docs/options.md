@@ -49,6 +49,34 @@ The guarantee is record-level for the training records, the split taken as given
 
 Results then add `reduced_test_acc`, the mean accuracy of the reduced subjects.
 
+## Inter-subject protocol
+
+Every subject is a target once: BNCI2014_001 and Weibo2014 leave one subject out,
+PhysionetMI one of 10 groups (`python -m rfl.experiments.loso folds --dataset <name>`).
+The split is that of the within-subject runs, then the targets are set apart. A target
+keeps its training and validation trials as a calibration pool, and its test trials as
+a test set common to every arm and every N. Its N labeled trials per class are those
+of the data-quantity study at the same seed (nested in N).
+
+| Option | Effect |
+|---|---|
+| `--target-subjects S ...` | the targets: no client, no training, no validation, no selection |
+| `--target-ns 0 5 10 20` | after training, adapt the reported model to each target, for each N |
+| `--target-role local` | the targets are the only clients (local from scratch, with `--local-only --train-trials-per-class N`) |
+
+The adaptation (`rfl/experiments/loso.py`) crosses the batch-norm statistics of the
+target (`none`: those of the sources, combined across clients with FedBN; `pool`:
+recomputed on the unlabeled pool; `labeled`: on the N labeled trials) with the head
+(`shared`: as trained; `shared_ft`: logistic regression on the frozen trunk, penalised
+towards the shared head; `local`: the same towards 0). C is chosen by cross-validation
+on the N trials. The results go to `target_metrics` in the result file, one record per
+target, N, statistics and head. `run_tslr --mode loso` gives the TS+LR references.
+
+The plans `mi_loso_calib`, `mi_loso`, `mi_loso_eegnet_calib`, `mi_loso_eegnet` and
+`mi_loso_tslr` (`mi_loso_study` runs them all) compute ReEig floors, calibrate and
+tune every fold on its sources only. `python -m rfl.analysis.paper <dataset>` then adds
+the section "Inter-subject".
+
 ## Data
 
 Trials are band-pass filtered (8 to 32 Hz) and resampled to 128 Hz. SPDNet uses one

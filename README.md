@@ -61,6 +61,7 @@ Lee2019_MI. One client per subject by default. Data go to `$MNE_DATA` (default
 | `--use-batch-norm` | SPD batch norm (EEGNet: `--eegnet-norm-type batch`), kept on each client unless `--no-fedbn` |
 | `--client-partition iid` | IID clients instead of one subject per client |
 | `--train-trials-per-class N` | keep N training trials per class and subject |
+| `--target-subjects S --target-ns 0 5` | inter-subject protocol: train without S, then adapt to S |
 | `--dp-enabled --dp-target-eps 10` | record-level differential privacy |
 
 Details in [docs/options.md](docs/options.md).
@@ -79,6 +80,7 @@ within 3000 rounds, and the model of the lowest validation loss is reported.
 | `mi_eegnet_bn` | The same for EEGNet |
 | `mi_datasize` (`_eegnet`, `_tslr`) | From how many trials per class does federation beat local training? |
 | `mi_study` | All of them, for one dataset |
+| `mi_loso` (`_eegnet`, `_tslr`, `_study`) | What does a model trained on other subjects give a new subject, with N calibration trials? |
 
 ```bash
 export RFL_DATASET=BNCI2014_001

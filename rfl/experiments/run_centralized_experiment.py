@@ -40,6 +40,7 @@ from torch.utils.data import DataLoader
 
 from rfl.data.data_utils import load_moabb_dataset, create_splits, filter_binary_task, resolve_resample
 from rfl.data.reduction import reduction_config
+from rfl.experiments.loso import target_config
 from rfl.data.datasets import build_dataset
 from rfl.data.registry import dataset_default, get_sampling_rate, is_known_dataset
 from rfl.models.eegnet import create_eegnet
@@ -135,22 +136,30 @@ def prepare_centralized_data(
         random_state=data_split_seed,
         verbose=True
     )
-    if config is not None and config.train_trials_per_class:
-        # Fewer calibration trials per subject (rfl/data/reduction.py), on the indices of
-        # the same split as create_splits and the federated runs.
-        from sklearn.model_selection import train_test_split
-        from rfl.data.reduction import reduce_indices
-        tr, te = train_test_split(np.arange(len(y)), test_size=test_size,
-                                  random_state=data_split_seed, stratify=y)
-        tr, va = train_test_split(tr, test_size=val_size / (1 - test_size),
-                                  random_state=data_split_seed, stratify=y[tr])
+    targets = []
+    if config is not None and (config.train_trials_per_class or config.target_subjects):
+        # On the indices of the same split as create_splits and the federated runs:
+        # fewer calibration trials per subject (rfl/data/reduction.py), or target
+        # subjects set apart (rfl/experiments/loso.py).
+        from rfl.data.data_utils import split_indices
+        tr, va, te = split_indices(y, val_size, test_size, data_split_seed)
         subject_of = np.asarray(meta.reset_index(drop=True)['subject'])
-        tr, va, red = reduce_indices(tr.tolist(), va.tolist(), y, subject_of,
-                                     list(subjects), config)
+        if config.target_subjects:
+            from rfl.experiments.loso import split_targets
+            targets = split_targets(X, y, subject_of, tr, va, te, list(subjects), config)
+            source = ~np.isin(subject_of, list(config.target_subjects))
+            tr, va, te = (np.sort(i[source[i]]) for i in (tr, va, te))
+            print(f"[Data] target subjects {list(config.target_subjects)} set apart: "
+                  f"train={len(tr)} val={len(va)} test={len(te)} on the sources")
+        if config.train_trials_per_class:
+            from rfl.data.reduction import reduce_indices
+            tr, va, red = reduce_indices(tr.tolist(), va.tolist(), y, subject_of,
+                                         list(subjects), config)
+            print(f"[Data] {len(red)} subject(s) reduced to "
+                  f"{config.train_trials_per_class} calibration trials per class: "
+                  f"train={len(tr)} val={len(va)}")
         split_data = {'train': (X[tr], y[tr]), 'val': (X[va], y[va]),
                       'test': (X[np.sort(te)], y[np.sort(te)])}
-        print(f"[Data] {len(red)} subject(s) reduced to {config.train_trials_per_class} "
-              f"calibration trials per class: train={len(tr)} val={len(va)}")
     
     n_channels = X.shape[1]
     n_timepoints = X.shape[2]
@@ -170,7 +179,8 @@ def prepare_centralized_data(
         'class_names': class_names,
         'sampling_rate': sampling_rate,
         'dataset_name': dataset_name,
-        'subjects': subjects
+        'subjects': subjects,
+        'targets': targets,              # rfl/experiments/loso.py, not written to disk
     }
     
     print(f"\n{'='*70}")
@@ -378,6 +388,12 @@ def run_centralized_experiment(
         torch.save(model.state_dict(), os.path.join(save_dir, 'model_recalibrated.pt'))
         print(f"[BN] running statistics recalibrated on the training data: val acc "
               f"{acc0:.4f} -> {acc:.4f} (model saved to model_recalibrated.pt)")
+    target_metrics = None
+    if info.get('targets') and config.target_ns:
+        # New subjects (rfl/experiments/loso.py): the reported model, adapted.
+        from rfl.experiments.loso import evaluate_targets
+        target_metrics = evaluate_targets(model, info['targets'], config, device,
+                                          info['n_classes'], shared_head=True)
     test_results = evaluator.evaluate_and_save(
         model=model,
         dataloader=test_loader,
@@ -431,6 +447,7 @@ def run_centralized_experiment(
             'recall_macro': test_results['recall_macro'],
             'loss': test_results['loss'],
         },
+        'target_metrics': target_metrics,
         'per_class_metrics': {
             'f1': test_results['per_class_f1'],
             'precision': test_results['per_class_precision'],
@@ -523,6 +540,8 @@ def _build_arg_parser():
     p.add_argument("--cov-regularization", type=float, default=0.0)
     from rfl.data.reduction import add_reduction_args
     add_reduction_args(p)
+    from rfl.experiments.loso import add_target_args
+    add_target_args(p, roles=False)
 
     # Training
     p.add_argument("--batch-size", type=int, default=64)
@@ -728,7 +747,7 @@ def config_from_args(args, src: str) -> ExperimentConfig:
         lr_plateau_factor=args.lr_plateau_factor, lr_min=args.lr_min,
         lr_schedule=args.lr_schedule, report_rule=args.report,
         val_size=args.val_size, test_size=args.test_size, resample=args.resample,
-        **reduction_config(args),
+        **reduction_config(args), **target_config(args),
         fmin=args.fmin, fmax=args.fmax,
         seed=args.seed, data_split_seed=args.seed, device=args.device,
         save_root=args.save_root,

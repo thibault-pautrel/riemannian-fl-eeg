@@ -3,13 +3,16 @@
     python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001
 
 Reads the final runs of one dataset under $RFL_RESULTS (mi_<dataset>_bn, _bn_eegnet,
-_datasize, _datasize_eegnet, _datasize_tslr) and writes, for the studies that have runs:
+_datasize, _datasize_eegnet, _datasize_tslr, _loso, _loso_eegnet, _loso_tslr) and writes,
+for the studies that have runs:
 
     tab_bn.tex                 batch norm: client mean test accuracy of every arm
     tab_bn_clients_<model>.tex batch norm: test accuracy of each subject
     fig_bn_rounds.tex          batch norm: client mean test accuracy against the round
     tab_datasize.tex           data quantity: accuracy against N (scenario U)
     fig_datasize.tex           data quantity: the same as a figure, one panel per network
+    tab_loso*.tex, fig_loso.tex, loso_tests.csv
+                               inter-subject study (rfl/analysis/loso.py)
     clients.csv                every final run: test accuracy of each client
     results.tex, results.pdf   one document with all of them (pdf when pdflatex is found)
 
@@ -405,15 +408,20 @@ def document(out: Path, dataset: str) -> Path:
              "\\usepgfplotslibrary{groupplots}", "\\pgfplotsset{compat=1.16}",
              f"\\title{{Results on {name}}}", "\\date{\\today}",
              "\\begin{document}", "\\maketitle"]
+    from rfl.analysis import loso as LO
+    captions = {**CAPTIONS, **LO.CAPTIONS, **LO.subject_captions(out)}
+    loso = ["tab_loso", "fig_loso", "tab_loso_tests",
+            *sorted(p.stem for p in out.glob("tab_loso_subjects_*.tex"))]
     for title, names in (("Batch norm", ("tab_bn", "tab_bn_clients_spdnet",
                                          "tab_bn_clients_eegnet", "fig_bn_rounds")),
-                         ("Data quantity", ("tab_datasize", "fig_datasize"))):
+                         ("Data quantity", ("tab_datasize", "fig_datasize")),
+                         ("Inter-subject", loso)):
         names = [n for n in names if (out / f"{n}.tex").exists()]
         if not names:
             continue
         lines.append(f"\\section{{{title}}}")
         for n in names:
-            caption = f"\\caption{{{CAPTIONS[n]}}}"
+            caption = f"\\caption{{{captions[n]}}}"
             if n.startswith("tab"):          # caption above a table, below a figure
                 lines += ["\\begin{table}[htbp]\\centering", caption,
                           "\\resizebox{\\ifdim\\width>\\linewidth\\linewidth\\else\\width\\fi}{!}"
@@ -470,6 +478,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         _write(out / "tab_datasize.tex", datasize_table(t))
         datasize_figure(t, out / "fig_datasize.tex")
         details.append(client_details(ds).assign(study="datasize"))
+
+    from rfl.analysis import loso as LO
+    rec = LO.write_all(root, a.dataset, out)
+    if rec is not None:
+        details.append(rec.rename(columns={"acc": "test_acc"})
+                       .assign(study="loso", subjects=rec.subject.astype(str)))
 
     if not details:
         raise SystemExit(f"no final run of {a.dataset} under {root}")

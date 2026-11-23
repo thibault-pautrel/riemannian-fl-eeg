@@ -12,6 +12,11 @@ with every federated arm of the same seed. Two modes:
              vectors of all clients. A non-federated transfer reference: the data are
              pooled.
 
+    loso     the inter-subject protocol (rfl/experiments/loso.py, --target-subjects):
+             the pooled model of the source subjects, then each target re-centred on
+             its own trials and scored as the pooled model, the pooled model refitted
+             with its N trials, and a model of its N trials alone (target_metrics).
+
 The inverse regularisation C is chosen on the validation accuracy of the reduced clients
 (all clients without reduction), from --C-grid, and reported in fl_results.json in the
 format of the federated runner (rfl/analysis/results.py reads it; model 'tslr', scope
@@ -56,9 +61,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     g.add_argument("--cov-shrinkage", type=float, default=0.0)
     g.add_argument("--cov-regularization", type=float, default=0.0)
     add_reduction_args(p)
+    from rfl.experiments.loso import add_target_args
+    add_target_args(p, roles=False)
     g = p.add_argument_group("baseline")
-    g.add_argument("--mode", default="local", choices=["local", "pooled"])
-    g.add_argument("--C-grid", default="0.01,0.1,1,10,100",
+    g.add_argument("--mode", default="local", choices=["local", "pooled", "loso"],
+                   help="'loso' needs --target-subjects and --target-ns.")
+    from rfl.experiments.loso import C_GRID
+    g.add_argument("--C-grid", default=",".join(f"{c:g}" for c in C_GRID),
                    help="Inverse regularisations tried; the best on validation is kept.")
     g.add_argument("--seed", type=int, default=42,
                    help="Seed of the split and of the reduction (as the other runners).")
@@ -163,6 +172,15 @@ def _parse(argv=None):
         validate(args)
     except ValueError as e:
         p.error(str(e))
+    if (args.mode == "loso") != bool(args.target_subjects):
+        p.error("--mode loso and --target-subjects go together")
+    if args.mode == "loso" and not args.target_ns:
+        p.error("--mode loso needs --target-ns")
+    if args.mode == "loso" and args.train_trials_per_class:
+        p.error("--mode loso draws the N trials of the targets from --target-ns: "
+                "--train-trials-per-class would reduce the sources")
+    if args.mode == "loso" and args.synthetic_clients:
+        p.error("--mode loso needs a real dataset (--dataset)")
     return p, args, C_grid
 
 
@@ -176,8 +194,9 @@ def main(argv=None) -> Dict[str, Any]:
     os.makedirs(args.save_dir, exist_ok=True)
 
     from rfl.data.reduction import reduction_config
+    from rfl.experiments.loso import target_config
     from rfl.federated.fl_config import FLConfig
-    from rfl.federated.server import create_fl_clients, create_fl_clients_synthetic
+    from rfl.federated.server import create_fl_clients_and_targets, create_fl_clients_synthetic
     import torch
     is_syn = args.synthetic_clients is not None
     if not is_syn and args.subjects is None:
@@ -192,23 +211,26 @@ def main(argv=None) -> Dict[str, Any]:
         val_size=args.val_size, test_size=args.test_size,
         cov_estimator=args.cov_estimator, cov_shrinkage=args.cov_shrinkage,
         cov_regularization=args.cov_regularization, fl_aggregation="projavg",
-        seed=args.seed, data_split_seed=args.seed, **reduction_config(args))
+        seed=args.seed, data_split_seed=args.seed, **reduction_config(args),
+        **target_config(args))
     device = torch.device("cpu")
+    targets = []
     if is_syn:
         from rfl.data.synthetic import load_clients
         clients = create_fl_clients_synthetic(load_clients(args.synthetic_clients),
                                               config, device, verbose=False)
     else:
-        clients = create_fl_clients(args.dataset, args.subjects, 1, config, device,
-                                    verbose=True)
+        clients, targets = create_fl_clients_and_targets(args.dataset, args.subjects, 1,
+                                                         config, device, verbose=True)
     data = [_client_arrays(c) for c in clients]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         feats = tangent_features(data)
         reduced = [c.client_id for c in clients if c.reduced] or list(range(len(clients)))
         tried = {}
+        fit_mode = "pooled" if args.mode == "loso" else args.mode
         for C in C_grid:
-            scores = fit_and_score(feats, args.mode, C)
+            scores = fit_and_score(feats, fit_mode, C)
             tried[C] = (float(np.nanmean([scores[i]["val"] for i in reduced])), scores)
     scored = [c for c in C_grid if np.isfinite(tried[c][0])]
     if scored:
@@ -220,6 +242,15 @@ def main(argv=None) -> Dict[str, Any]:
         print(f"[tslr] warning: the reduced clients have no validation trial; C={best:g} "
               "is fixed instead of chosen")
     final = _metrics(feats, tried[best][1])
+    target_metrics = None
+    if args.mode == "loso":
+        from rfl.experiments.loso import tslr_targets
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            target_metrics = tslr_targets(
+                np.concatenate([f["train"][0] for f in feats]),
+                np.concatenate([f["train"][1] for f in feats]), best, targets, config,
+                C_grid)
 
     cfg = config.to_dict()
     cfg.update(model_type="tslr", tslr_mode=args.mode, tslr_C_grid=C_grid)
@@ -230,13 +261,15 @@ def main(argv=None) -> Dict[str, Any]:
                     "client_train_samples": [len(d["train"][1]) for d in data],
                     "client_val_samples": [len(d["val"][1]) for d in data],
                     "train_trials_per_class": config.train_trials_per_class,
-                    "reduced_clients": [c.client_id for c in clients if c.reduced]},
+                    "reduced_clients": [c.client_id for c in clients if c.reduced],
+                    "target_subjects": list(config.target_subjects)},
         "personalisation": args.mode,
         "report_rule": "last",
         "final_metrics": final,
         "last_round_metrics": final,
         "personalized_metrics": None,
         "round_history": {},
+        "target_metrics": target_metrics,
         "tslr": {"mode": args.mode, "C": best, "C_rule": rule,
                  "val_acc_by_C": {f"{c:g}": tried[c][0] for c in C_grid}},
     }
