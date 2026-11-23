@@ -4,7 +4,7 @@ Federated learning of SPDNet and EEGNet for motor-imagery EEG decoding on
 [MOABB](https://moabb.neurotechx.com/) datasets, with personalisation and differential
 privacy.
 
-Code of two papers, whose own repositories stay frozen: *Projection-Based Federated
+Code of two papers: *Projection-Based Federated
 Learning on Compact Submanifolds with Geometry-Independent Differential Privacy*
 (arXiv:2610.33712) and *How much representation learning does federated EEG decoding
 need? The case of SPDNet* (arXiv:2609.29037).
