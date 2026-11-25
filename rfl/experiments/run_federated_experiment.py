@@ -664,6 +664,10 @@ def _build_arg_parser():
                    help="Set the ReEig floors to this percentile of the spectrum each "
                         "ReEig acts on, from the floors file of analyze_covariances "
                         "--architectures (needs --hidden-dims).")
+    g.add_argument("--reeig-percentile-2", type=float, default=None,
+                   help="Percentile of the floor of block 2, when it differs from "
+                        "--reeig-percentile (which then sets block 1 only). Needs two "
+                        "blocks and a floors file written with --per-block-percentiles.")
     g.add_argument("--floors-file", default=None,
                    help="Floors file of --reeig-percentile (default "
                         "$RFL_RESULTS/reeig_floors/<dataset>.json).")
@@ -821,6 +825,7 @@ def config_from_args(args) -> FLConfig:
         weight_decay=args.weight_decay,
         optimizer=args.optimizer, sgd_momentum=args.momentum,
         spdnet_stiefel=args.stiefel, spdnet_reeig_percentile=args.reeig_percentile,
+        spdnet_reeig_percentile_2=args.reeig_percentile_2,
         lr_schedule=args.lr_schedule, lr_min=args.lr_min,
         lr_plateau_patience=args.lr_plateau_patience,
         lr_plateau_factor=args.lr_plateau_factor,

@@ -42,7 +42,7 @@ DP = ("dp_target_eps", "dp_target_delta", "dp_clip_C", "dp_accounting",
       "dp_compare_prirfed", "dp_accountant_h")
 BN = ("bn_type", "bn_mean_type", "bn_norm_and_bias_mode", "bn_position")
 SPD = ("use_batch_norm", "hidden_dim", "epsilon", "hidden_dims", "epsilons",
-       "trace_normalize", "stiefel", "reeig_percentile")
+       "trace_normalize", "stiefel", "reeig_percentile", "reeig_percentile_2")
 COV = ("cov_estimator", "cov_shrinkage", "cov_regularization")
 PREPROC = ("subjects", "task", "resample", "fmin", "fmax", "subjects_per_client",
            "client_partition")
@@ -53,7 +53,7 @@ RULES: List[Rule] = [
     (DP, lambda a: a.dp_enabled, "only acts with --dp-enabled"),
     (SPD, lambda a: a.model == "spdnet", "only acts with --model spdnet"),
     (("momentum",), lambda a: a.optimizer == "sgd", "only acts with --optimizer sgd"),
-    (("floors_file",), lambda a: a.reeig_percentile is not None,
+    (("floors_file", "reeig_percentile_2"), lambda a: a.reeig_percentile is not None,
      "only acts with --reeig-percentile"),
     (BN, lambda a: a.model == "spdnet" and a.use_batch_norm,
      "only acts with --model spdnet --use-batch-norm"),
@@ -229,6 +229,7 @@ FIELD_FLAGS = {
     "fl_aggregation": "--aggregation", "fl_local_fc": "--local-fc",
     "fl_client_partition": "--client-partition", "spdnet_stiefel": "--stiefel",
     "spdnet_reeig_percentile": "--reeig-percentile",
+    "spdnet_reeig_percentile_2": "--reeig-percentile-2",
     "optimizer": "--optimizer", "sgd_momentum": "--momentum",
     "fl_local_head_mode": "--local-head-mode", "fl_local_only": "--local-only",
     "target_subjects": "--target-subjects", "target_role": "--target-role",
@@ -260,6 +261,7 @@ FIELD_FLAGS = {
 def resolve_reeig_percentile(p, args, src: str) -> None:
     """--reeig-percentile Q: set --epsilons from the floors file (analyze_covariances
     --architectures), for the architecture --hidden-dims, with or without batch norm.
+    With --reeig-percentile-2 Q2, Q sets block 1 and Q2 block 2.
 
     Calls p.error on a combination without floors (no file, no entry, explicit floors).
     """
@@ -276,6 +278,13 @@ def resolve_reeig_percentile(p, args, src: str) -> None:
     if args.use_batch_norm and getattr(args, "bn_position", "after_reeig") != "after_reeig":
         p.error("--reeig-percentile: the floors are computed with the batch norm after "
                 "ReEig (--bn-position after_reeig)")
+    q2 = getattr(args, "reeig_percentile_2", None)
+    if q2 is not None:
+        from rfl.models.spdnet import parse_int_list
+        if len(parse_int_list(args.hidden_dims, [])) != 2:
+            p.error("--reeig-percentile-2 sets the floor of block 2: it needs two blocks "
+                    "in --hidden-dims")
+        q = [q, q2]
     from rfl.experiments.analyze_covariances import floors_for
     try:
         args.epsilons = floors_for(src, args.hidden_dims, args.use_batch_norm, q,

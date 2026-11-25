@@ -15,8 +15,10 @@ head with `config.fl_local_head_mode == 'frozen'`.
 
 A non-private round of local training is `n_epochs` passes over a shuffled DataLoader
 of batch size B, so ceil(m_i / B) steps per epoch, the last one on the remaining
-m_i mod B records. SPDNet steps are Adam on the Euclidean gradient followed by the
-polar projection of the BiMap weights (`SPDNet.project_stiefel`).
+m_i mod B records, with `config.optimizer` (Adam or SGD). With --stiefel projection an
+SPDNet step is followed by the polar projection of the BiMap weights
+(`SPDNet.project_stiefel`). With --stiefel trivialization the weights stay orthonormal
+by construction.
 rfl/federated/privacy/dp_client.py subclasses this class and overrides `train_local` only.
 """
 
@@ -261,7 +263,7 @@ class FLClient:
         Args:
             n_epochs: number of local epochs.
             criterion: loss function.
-            learning_rate: Adam learning rate for this round.
+            learning_rate: learning rate of this round.
             is_spdnet: not used by this class. The server passes it to every client class.
             apply_constraints: apply EEGNet's max-norm constraints after each step.
             verbose: show a progress bar.

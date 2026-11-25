@@ -5,7 +5,7 @@ The Stiefel functions are imported on first use, so that the Grassmann code and 
 synthetic experiments run without PyTorch.
 """
 __all__ = ["polar_projection", "tangent_projection", "lifting", "retraction",
-           "inverse_polar_retraction"]
+           "inverse_polar_retraction", "pseudo_exp", "pseudo_log"]
 
 
 def __getattr__(name):

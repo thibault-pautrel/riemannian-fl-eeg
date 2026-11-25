@@ -121,7 +121,7 @@ def _ortho_err(W):
     return float(torch.norm(W.T @ W - torch.eye(W.shape[1])))
 
 
-@pytest.mark.parametrize("agg", ["projavg", "rlavg", "retavg"])
+@pytest.mark.parametrize("agg", ["projavg", "rlavg", "retavg", "pseavg"])
 def test_spdnet_rounds_record_history(agg):
     cfg = _cfg("spdnet", fl_aggregation=agg, learning_rate=1e-3, lr_schedule="none")
     clients, server = _federation(cfg)
@@ -207,6 +207,49 @@ def test_spdnet_batchnorm_runs_and_stays_local():
     biases = [c.local_model.state_dict()[key] for c in clients]
     assert not torch.equal(biases[0], biases[1])            # personal, trained locally
     assert not torch.equal(biases[0], server.global_state_dict[key])
+
+
+@pytest.mark.parametrize("agg", ["projavg", "rlavg", "retavg", "pseavg"])
+def test_two_blocks_with_fedper_and_fedbn_exchange_only_the_bimap_weights(agg, monkeypatch):
+    """[BiMap -> ReEig -> BN] x 2 with a personal head and local batch norms: the
+    server averages the two Stiefel weights and nothing else, with every rule, under
+    partial participation and several local epochs."""
+    pytest.importorskip("yetanotherspdnet")
+    import rfl.federated.server as S
+    seen = {}
+    real = S.FLServer._aggregate_rule
+
+    def record(self, strategy, sds, stiefel, weights):
+        out = real(self, strategy, sds, stiefel, weights)
+        seen.setdefault("rounds", []).append(set(out))
+        return out
+    monkeypatch.setattr(S.FLServer, "_aggregate_rule", record)
+    cfg = _cfg("spdnet", fl_aggregation=agg, spdnet_hidden_dims="5,3",
+               spdnet_epsilons="1e-3,1e-2", spdnet_use_batch_norm=True,
+               spdnet_stiefel="trivialization", optimizer="sgd", fl_local_fc=True,
+               fl_client_fraction=0.5, fl_local_epochs=3, learning_rate=1e-2,
+               lr_schedule="none")
+    clients, server = _federation(cfg, n_clients=4)
+    _run(server, clients, 2)
+    assert seen["rounds"] == [{"bimap.weight", "bimap_2.weight"}] * 2
+    for key in ("bimap.weight", "bimap_2.weight"):
+        assert _ortho_err(server.global_state_dict[key]) < 1e-4
+
+
+def test_a_diverged_client_stops_the_round_before_the_aggregation(monkeypatch):
+    from rfl.training.divergence import TrainingDiverged
+    cfg = _cfg("spdnet", fl_aggregation="pseavg")
+    clients, server = _federation(cfg)
+    train = clients[0].train_local
+
+    def nan_loss(*a, **kw):
+        state, m = train(*a, **kw)
+        return state, {**m, "train_loss": float("nan")}
+    monkeypatch.setattr(clients[0], "train_local", nan_loss)
+    monkeypatch.setattr(server, "aggregate_updates",
+                        lambda *a, **kw: pytest.fail("aggregated a diverged round"))
+    with pytest.raises(TrainingDiverged):
+        _run(server, clients, 1)
 
 
 def test_local_only_selected_keeps_each_clients_best_model():

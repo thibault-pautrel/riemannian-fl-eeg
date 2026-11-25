@@ -54,7 +54,7 @@ Lee2019_MI. One client per subject by default. Data go to `$MNE_DATA` (default
 | Option | Effect |
 |---|---|
 | `--model spdnet` / `eegnet` | SPDNet (BiMap weights on the Stiefel manifold) or EEGNet |
-| `--aggregation projavg` / `rlavg` / `retavg` | SPDNet aggregation (EEGNet: FedAvg) |
+| `--aggregation projavg` / `rlavg` / `retavg` / `pseavg` | SPDNet aggregation (EEGNet: FedAvg) |
 | `--local-fc` | personal classifier head (FedPer) |
 | `--local-only` | each client trains alone |
 | `--head-refit-epochs 25,50,100` | each client re-fits its head after training |

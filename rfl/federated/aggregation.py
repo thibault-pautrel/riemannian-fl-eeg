@@ -7,12 +7,15 @@ current global BiMap weight, the rules are:
     projavg   uf(sum_i w_i W_i)                          RFedProj
     rlavg     uf(W_t + sum_i w_i P_{W_t}(W_i - W_t))     RFedRL
     retavg    R_{W_t}(sum_i w_i R_{W_t}^{-1}(W_i))       PriRFed (Huang et al., Eq. 8)
+    pseavg    E_{W_t}(sum_i w_i E_{W_t}^{-1}(W_i))       PseAvg (L.-F. Marignier)
 
 Here uf is the orthogonal polar factor, P_W the tangent projection and R_W the polar
-retraction on St(n, p) (rfl/geometry/stiefel.py). A BiMap weight is a tall matrix W of
+retraction on St(n, p), and E the pseudo-exponential of a geometry where the subspace
+and the rotation of W are separate, St(n, p) ~ Gr(n, p) x O(p) (rfl/geometry/stiefel.py,
+pseudo_exp and pseudo_log). A BiMap weight is a tall matrix W of
 shape (n_in, n_out) with W^T W = I, and the layer computes Sigma -> W^T Sigma W.
 
-Only the last three rules map back onto the Stiefel manifold, and SPDNet uses one of
+Only the last four rules map back onto the Stiefel manifold, and SPDNet uses one of
 them (FLConfig refuses SPDNet with fedavg, whose extrinsic mean leaves the manifold).
 fedavg is the rule of EEGNet, whose parameters are all Euclidean.
 
@@ -47,7 +50,7 @@ import torch
 import torch.nn as nn
 
 from rfl.geometry.stiefel import (
-    inverse_polar_retraction, lifting, polar_projection, retraction,
+    inverse_polar_retraction, lifting, polar_projection, pseudo_exp, pseudo_log, retraction,
 )
 
 __all__ = [
@@ -55,6 +58,7 @@ __all__ = [
     "polar_projection", "lifting", "retraction", "inverse_polar_retraction",
     # aggregation rules
     "fedavg_aggregate", "projavg_aggregate", "rlavg_aggregate", "retavg_aggregate",
+    "pseavg_aggregate",
     # registry of the rules by name
     "AggregationRule", "AGGREGATION_RULES", "get_rule", "rule_names",
     # key and matrix identification
@@ -227,6 +231,27 @@ def projavg_aggregate(
     return agg
 
 
+def _tangent_mean_aggregate(lift, back, client_stiefel_matrices, client_state_dicts,
+                            global_model, weights, fedbn):
+    """W_{t+1} = back(W_t, sum_i w_i lift(W_t, W_i)) on the Stiefel keys, the Euclidean
+    weighted mean on the other keys (the local normalisation keys left out under FedBN).
+    W_t is read from `global_model`."""
+    weights = _normalize_weights(weights, len(client_stiefel_matrices))
+    global_stiefel = extract_stiefel_matrices_from_model(global_model)
+    stiefel_keys = set(global_stiefel)
+    bn_keys = _local_keys(client_state_dicts[0], fedbn)
+    agg = OrderedDict()
+    for name in sorted(stiefel_keys):
+        base = global_stiefel[name].clone()
+        tangent = torch.zeros_like(base)
+        for w, matrices in zip(weights, client_stiefel_matrices):
+            tangent = tangent + w * lift(base, matrices[name].clone())
+        agg[name] = back(base, tangent)
+    for name in _euclidean_keys(client_state_dicts[0], bn_keys, stiefel_keys):
+        agg[name] = _weighted_average([sd[name] for sd in client_state_dicts], weights)
+    return agg
+
+
 def rlavg_aggregate(
     client_stiefel_matrices: List[Dict[str, torch.Tensor]],
     client_state_dicts: List[Dict[str, torch.Tensor]],
@@ -250,22 +275,8 @@ def rlavg_aggregate(
     Returns:
         The aggregated state dict, without the local normalisation keys under FedBN.
     """
-    n = len(client_stiefel_matrices)
-    weights = _normalize_weights(weights, n)
-    global_stiefel = extract_stiefel_matrices_from_model(global_model)
-    stiefel_keys = set(global_stiefel)
-    bn_keys = _local_keys(client_state_dicts[0], fedbn)
-
-    agg = OrderedDict()
-    for name in sorted(stiefel_keys):
-        base = global_stiefel[name].clone()
-        tangent = torch.zeros_like(base)
-        for w, matrices in zip(weights, client_stiefel_matrices):
-            tangent = tangent + w * lifting(base, matrices[name].clone())
-        agg[name] = retraction(base, tangent)
-    for name in _euclidean_keys(client_state_dicts[0], bn_keys, stiefel_keys):
-        agg[name] = _weighted_average([sd[name] for sd in client_state_dicts], weights)
-    return agg
+    return _tangent_mean_aggregate(lifting, retraction, client_stiefel_matrices,
+                                   client_state_dicts, global_model, weights, fedbn)
 
 
 def retavg_aggregate(
@@ -278,42 +289,43 @@ def retavg_aggregate(
     """RetAvg (PriRFed baseline): W_{t+1} = R_{W_t}(sum_i w_i R_{W_t}^{-1}(W_i)).
 
     Same structure as RLAvg, with the exact inverse polar retraction in place of the
-    first-order lifting. Each inverse retraction solves a continuous Lyapunov equation as
-    a dense p^2 x p^2 linear system, O(p^6) in the BiMap output dimension p, per client
-    and per Stiefel key. This cost is
-    what `agg_seconds` in the round history measures.
+    first-order lifting. Each inverse retraction solves a continuous Lyapunov equation
+    (Bartels-Stewart, O(p^3) in the BiMap output dimension p), per client and per
+    Stiefel key. This cost is what `agg_seconds` in the round history measures.
 
-    Args:
-        client_stiefel_matrices: BiMap weights per client.
-        client_state_dicts: one state dict per client.
-        global_model: current global model, which provides W_t.
-        weights: client weights, normalised internally. None means uniform.
-        fedbn: leave the normalisation keys out (FedBN). False averages them.
-
-    Returns:
-        The aggregated state dict, without the local normalisation keys under FedBN.
+    Args and returns: as `rlavg_aggregate`.
 
     Raises:
-        ValueError: if a client weight lies outside the neighbourhood of W_t where the
-            polar retraction is invertible (geometry.stiefel.inverse_polar_retraction).
+        RetractionNotInvertible: if a client weight lies outside the neighbourhood of
+            W_t where the polar retraction is invertible (the run is then recorded as
+            diverged, rfl/training/divergence.py).
     """
-    n = len(client_stiefel_matrices)
-    weights = _normalize_weights(weights, n)
-    global_stiefel = extract_stiefel_matrices_from_model(global_model)
-    stiefel_keys = set(global_stiefel)
-    bn_keys = _local_keys(client_state_dicts[0], fedbn)
+    return _tangent_mean_aggregate(inverse_polar_retraction, retraction,
+                                   client_stiefel_matrices, client_state_dicts,
+                                   global_model, weights, fedbn)
 
-    agg = OrderedDict()
-    for name in sorted(stiefel_keys):
-        base = global_stiefel[name].clone()
-        tangent = torch.zeros_like(base)
-        for w, matrices in zip(weights, client_stiefel_matrices):
-            tangent = tangent + w * inverse_polar_retraction(
-                base, matrices[name].clone())
-        agg[name] = retraction(base, tangent)
-    for name in _euclidean_keys(client_state_dicts[0], bn_keys, stiefel_keys):
-        agg[name] = _weighted_average([sd[name] for sd in client_state_dicts], weights)
-    return agg
+
+def pseavg_aggregate(
+    client_stiefel_matrices: List[Dict[str, torch.Tensor]],
+    client_state_dicts: List[Dict[str, torch.Tensor]],
+    global_model: nn.Module,
+    weights: Optional[List[float]] = None,
+    fedbn: bool = True,
+) -> Dict[str, torch.Tensor]:
+    """PseAvg (L.-F. Marignier): W_{t+1} = E_{W_t}(sum_i w_i E_{W_t}^{-1}(W_i)).
+
+    Same structure as RetAvg, with the pseudo-exponential and pseudo-logarithm of
+    rfl/geometry/stiefel.py, which keep the subspace part (Grassmann) and the rotation
+    part (O(p)) of a tangent vector apart.
+
+    Args and returns: as `rlavg_aggregate`.
+
+    Raises:
+        RetractionNotInvertible: if a client weight lies outside the domain of the
+            pseudo-logarithm at W_t (the run is then recorded as diverged).
+    """
+    return _tangent_mean_aggregate(pseudo_log, pseudo_exp, client_stiefel_matrices,
+                                   client_state_dicts, global_model, weights, fedbn)
 
 
 # --------------------------------------------------------------------------- #
@@ -345,6 +357,9 @@ AGGREGATION_RULES: Dict[str, AggregationRule] = {
     "retavg": AggregationRule(
         lambda S, sds, g, w=None, fedbn=True: retavg_aggregate(S, sds, g, w, fedbn=fedbn),
         description="R_{W_t}(sum_i w_i R_{W_t}^{-1}(W_i)) (PriRFed)"),
+    "pseavg": AggregationRule(
+        lambda S, sds, g, w=None, fedbn=True: pseavg_aggregate(S, sds, g, w, fedbn=fedbn),
+        description="E_{W_t}(sum_i w_i E_{W_t}^{-1}(W_i)) (PseAvg)"),
 }
 
 

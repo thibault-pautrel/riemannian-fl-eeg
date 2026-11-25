@@ -1,4 +1,4 @@
-"""Aggregation rules: fedavg, projavg, rlavg and retavg.
+"""Aggregation rules: fedavg, projavg, rlavg, retavg and pseavg.
 
 Uses a toy model with a BiMap-named module, so SPDNet is not required.
 """
@@ -9,7 +9,8 @@ import torch.nn as nn
 
 from rfl.federated.aggregation import (
     extract_stiefel_matrices_from_model, fedavg_aggregate, identify_batchnorm_keys,
-    identify_stiefel_keys, projavg_aggregate, retavg_aggregate, rlavg_aggregate,
+    identify_stiefel_keys, projavg_aggregate, pseavg_aggregate, retavg_aggregate,
+    rlavg_aggregate,
 )
 from rfl.geometry.stiefel import polar_projection, retraction, tangent_projection
 
@@ -120,7 +121,11 @@ def test_no_clients_raises():
 # --------------------------------------------------------------------------- #
 #  Riemannian rules
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("rule", ["projavg", "rlavg", "retavg"])
+TANGENT_RULES = {"rlavg": rlavg_aggregate, "retavg": retavg_aggregate,
+                 "pseavg": pseavg_aggregate}
+
+
+@pytest.mark.parametrize("rule", ["projavg", "rlavg", "retavg", "pseavg"])
 def test_riemannian_rules_stay_on_stiefel(rule):
     n, p, k = 22, 11, 6
     Wt = _rand_stiefel(n, p, seed=1)
@@ -129,7 +134,7 @@ def test_riemannian_rules_stay_on_stiefel(rule):
     if rule == "projavg":
         out = projavg_aggregate(csm, csd)
     else:
-        out = {"rlavg": rlavg_aggregate, "retavg": retavg_aggregate}[rule](csm, csd, gm)
+        out = TANGENT_RULES[rule](csm, csd, gm)
     assert _ortho_err(out["bimap.weight"]) < 1e-4
     # Euclidean keys are the uniform mean of 0, 1, ..., k-1.
     assert torch.allclose(out["classifier.bias"], torch.full((4,), (k - 1) / 2))
@@ -149,18 +154,19 @@ def test_projavg_equals_polar_factor_of_mean():
     assert torch.allclose(projavg_aggregate(csm, csd)["bimap.weight"], expected, atol=1e-5)
 
 
-def test_retavg_consensus_recovery():
+@pytest.mark.parametrize("rule", ["retavg", "pseavg"])
+def test_exact_inverse_rules_recover_consensus(rule):
     """Clients equal to a common point Wc near the base point give back Wc."""
     n, p, k = 22, 11, 5
     Wt = _rand_stiefel(n, p, seed=2)
     gm = _TinySPDNet(Wt.float())
     Wc = _clients_near(Wt, 1, 0.04, seed=20)[0]
     csm, csd = _client_dicts([Wc] * k)
-    out = retavg_aggregate(csm, csd, gm)["bimap.weight"].double()
+    out = TANGENT_RULES[rule](csm, csd, gm)["bimap.weight"].double()
     assert torch.norm(out - Wc) < 1e-4
     # Clients equal to the base point give back the base point.
     csm0, csd0 = _client_dicts([Wt] * k)
-    out0 = retavg_aggregate(csm0, csd0, gm)["bimap.weight"].double()
+    out0 = TANGENT_RULES[rule](csm0, csd0, gm)["bimap.weight"].double()
     assert torch.norm(out0 - Wt) < 1e-4
 
 
@@ -172,8 +178,10 @@ def test_rules_agree_to_first_order_for_small_steps():
     out_proj = projavg_aggregate(csm, csd)["bimap.weight"].double()
     out_rl = rlavg_aggregate(csm, csd, gm)["bimap.weight"].double()
     out_ret = retavg_aggregate(csm, csd, gm)["bimap.weight"].double()
+    out_pse = pseavg_aggregate(csm, csd, gm)["bimap.weight"].double()
     assert torch.norm(out_ret - out_rl) < 5e-2
     assert torch.norm(out_ret - out_proj) < 5e-2
+    assert torch.norm(out_ret - out_pse) < 5e-2
 
 
 def test_retavg_rejects_points_outside_the_invertibility_domain():
@@ -184,12 +192,25 @@ def test_retavg_rejects_points_outside_the_invertibility_domain():
         retavg_aggregate(csm, csd, gm)
 
 
+def test_pseavg_rejects_points_outside_its_domain():
+    from rfl.geometry.stiefel import RetractionNotInvertible
+    W = _rand_stiefel(6, 3, seed=9)
+    gm = _TinySPDNet(W.float())
+    complement = torch.linalg.qr(W, mode="complete")[0][:, 3:]
+    for Y, why in ((torch.cat([W[:, :2], complement[:, :1]], 1), "Grassmannian"),
+                   (-W, "orientation"),
+                   (W * torch.tensor([-1., -1., 1.], dtype=DT), "angle")):
+        csm, csd = _client_dicts([Y])
+        with pytest.raises(RetractionNotInvertible, match=why):
+            pseavg_aggregate(csm, csd, gm)
+
+
 # --------------------------------------------------------------------------- #
 #  Registry of the rules (a new mean on St(n, p) in one function)
 # --------------------------------------------------------------------------- #
 def test_registry_holds_the_rules_and_their_kind():
     from rfl.federated.aggregation import get_rule, rule_names
-    assert set(rule_names()) >= {"fedavg", "projavg", "rlavg", "retavg"}
+    assert set(rule_names()) >= {"fedavg", "projavg", "rlavg", "retavg", "pseavg"}
     assert "fedavg" not in rule_names(stiefel=True) and not get_rule("fedavg").stiefel
     with pytest.raises(ValueError, match="unknown aggregation rule"):
         get_rule("nope")

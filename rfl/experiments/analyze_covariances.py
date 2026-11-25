@@ -24,7 +24,9 @@ trained W shifts the spectrum.
 With --architectures it calibrates every floor where its ReEig acts, for each listed
 architecture ("16", "64,32", ...), with and without the SPD batch norm, at each
 percentile of --percentiles, and writes them to <floors-dir>/<dataset>.json. The runners
-read them with --reeig-percentile Q (rfl/experiments/cli_checks.py), and the plans of the
+read them with --reeig-percentile Q, or with --reeig-percentile Q1 --reeig-percentile-2 Q2
+for one percentile per block (--per-block-percentiles, rfl/experiments/cli_checks.py), and
+the plans of the
 batch-norm study tune Q (rfl/experiments/plans/mi_spdnet_bn_calib.py). Block k sees the output of block k - 1
 (after its ReEig, and after its batch norm when there is one) through the congruence by
 a random Stiefel W_k. Its floor is the percentile of that spectrum. Without batch norm a
@@ -190,13 +192,13 @@ def _gah_whiten(y: np.ndarray) -> np.ndarray:
     return isq @ y @ isq
 
 
-def architecture_floors(covs: np.ndarray, dims: List[int], percentile: float,
-                        batch_norm: bool, seed: int = 0,
-                        trace_normalize: bool = True) -> Dict[str, Any]:
+def architecture_floors(covs: np.ndarray, dims: List[int], percentile, batch_norm: bool,
+                        seed: int = 0, trace_normalize: bool = True) -> Dict[str, Any]:
     """ReEig floors of one architecture, each calibrated on the spectrum it acts on.
 
     See the module docstring (--architectures). W_k is a random point of St(d_k, h_k)
-    drawn with `seed + k`.
+    drawn with `seed + k`. `percentile` is one percentile for every block, or one per
+    block.
 
     Returns:
         Dict with 'floors' (one per block), 'exact' (before rounding) and 'clamped'
@@ -206,34 +208,74 @@ def architecture_floors(covs: np.ndarray, dims: List[int], percentile: float,
         ValueError: on a dimension above the previous one, or when a floor without
             batch norm cannot exceed the previous one (the block would be inert).
     """
+    qs = ([float(percentile)] * len(dims) if np.isscalar(percentile)
+          else [float(q) for q in percentile])
+    if len(qs) != len(dims):
+        raise ValueError(f"{len(qs)} percentiles for {len(dims)} blocks")
+    errors: List[str] = []
+    out = _floor_tree(_frame(covs, trace_normalize), dims, [[q] for q in qs], batch_norm,
+                      seed, errors)
+    if not out:
+        raise ValueError(errors[0])
+    return out[tuple(qs)]
+
+
+def architecture_floor_grid(covs: np.ndarray, dims: List[int], percentiles, batch_norm: bool,
+                            seed: int = 0, trace_normalize: bool = True
+                            ) -> Dict[tuple, Dict[str, Any]]:
+    """`architecture_floors` for every combination of `percentiles` across the blocks,
+    keyed by the tuple of per-block percentiles. Each block spectrum is computed once
+    per choice of the blocks before it. Combinations whose floors cannot increase
+    (no batch norm) are left out."""
+    return _floor_tree(_frame(covs, trace_normalize), dims,
+                       [[float(q) for q in percentiles]] * len(dims), batch_norm, seed, [])
+
+
+def _frame(covs: np.ndarray, trace_normalize: bool) -> np.ndarray:
     z = np.asarray(covs, dtype=np.float64)
-    if trace_normalize:
-        z = z / np.trace(z, axis1=-2, axis2=-1)[:, None, None]
-    floors: List[float] = []
-    exact: List[float] = []
-    clamped: List[float] = []
-    for k, h in enumerate(dims):
-        d = z.shape[-1]
-        if h > d:
-            raise ValueError(f"block {k + 1}: hidden dim {h} > input dim {d}")
-        W, _ = np.linalg.qr(np.random.RandomState(seed + k).normal(size=(d, h)))
-        y = W.T @ z @ W
-        lam, U = np.linalg.eigh((y + np.swapaxes(y, 1, 2)) / 2)
-        e = recommend_epsilon(lam, percentile)
-        prev = floors[-1] if floors and not batch_norm else None
+    return z / np.trace(z, axis1=-2, axis2=-1)[:, None, None] if trace_normalize else z
+
+
+def _floor_tree(z: np.ndarray, dims: List[int], choices: List[List[float]],
+                batch_norm: bool, seed: int, errors: List[str], k: int = 0,
+                prev: Optional[float] = None) -> Dict[tuple, Dict[str, Any]]:
+    """Floors of blocks k, k+1, ... for every combination of `choices` (one list of
+    percentiles per block), keyed by the tuple of percentiles. z is the input of block
+    k and `prev` the floor of block k - 1 (None with batch norm, which re-centres)."""
+    if k == len(dims):
+        return {(): {"floors": [], "exact": [], "clamped": []}}
+    d, h = z.shape[-1], dims[k]
+    if h > d:
+        raise ValueError(f"block {k + 1}: hidden dim {h} > input dim {d}")
+    W, _ = np.linalg.qr(np.random.RandomState(seed + k).normal(size=(d, h)))
+    y = W.T @ z @ W
+    lam, U = np.linalg.eigh((y + np.swapaxes(y, 1, 2)) / 2)
+    out: Dict[tuple, Dict[str, Any]] = {}
+    for q in choices[k]:
+        e = recommend_epsilon(lam, q)
         if prev is not None and e <= prev:
-            e = recommend_epsilon2(lam, prev, percentile)
+            e = recommend_epsilon2(lam, prev, q)
         f = _round_floor(e, prev)
         if prev is not None and f <= prev:
-            raise ValueError(f"block {k + 1}: no floor above {prev:g} at the "
-                             f"{percentile:g}th percentile: the block would be inert.")
-        floors.append(f)
-        exact.append(float(e))
-        clamped.append(float(np.mean(lam < f)))
-        z = (U * np.maximum(lam, f)[:, None, :]) @ np.swapaxes(U, 1, 2)   # ReEig
+            errors.append(f"block {k + 1}: no floor above {prev:g} at the {q:g}th "
+                          "percentile: the block would be inert.")
+            continue
+        nxt = (U * np.maximum(lam, f)[:, None, :]) @ np.swapaxes(U, 1, 2)     # ReEig
         if batch_norm and k + 1 < len(dims):
-            z = _gah_whiten(z)
-    return {"floors": floors, "exact": exact, "clamped": clamped}
+            nxt = _gah_whiten(nxt)
+        rest = _floor_tree(nxt, dims, choices, batch_norm, seed, errors, k + 1,
+                           None if batch_norm else f)
+        for tail, r in rest.items():
+            out[(q,) + tail] = {"floors": [f] + r["floors"], "exact": [float(e)] + r["exact"],
+                                "clamped": [float(np.mean(lam < f))] + r["clamped"]}
+    return out
+
+
+def percentile_key(percentiles) -> str:
+    """Key of the floors file: '15' when every block has the same percentile, else
+    '15,30' (one per block)."""
+    qs = [float(percentiles)] if np.isscalar(percentiles) else [float(q) for q in percentiles]
+    return f"{qs[0]:g}" if len(set(qs)) == 1 else ",".join(f"{q:g}" for q in qs)
 
 
 PERCENTILES = (1, 2, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80)
@@ -253,23 +295,33 @@ def write_floors(dataset: str, covs: np.ndarray, architectures: List[str], args)
     percentile of args.percentiles, and write them to floors_file(dataset).
 
     Layout: {"meta": ..., "architectures": {arch: {"nobn"|"bn": {"<q>": {"floors",
-    "exact", "clamped"}}}}}. An architecture or percentile whose floors cannot increase
-    without batch norm is left out (the runner then refuses it). Returns the path.
+    "exact", "clamped"}}}}}. With args.per_block_percentiles, a deep architecture also
+    gets every combination of percentiles across its blocks, under keys "q1,q2,..."
+    (`percentile_key`). An architecture or percentile whose floors cannot increase
+    without batch norm is left out (the runner then refuses it). The architectures
+    already in the file and not listed here are kept. Returns the path.
     """
+    per_block = bool(getattr(args, "per_block_percentiles", False))
     out: Dict[str, Any] = {}
     for arch in architectures:
         dims = [int(x) for x in arch.split(",")]
         out[arch] = {"nobn": {}, "bn": {}}
         for bn in (False, True):
-            for q in args.percentiles:
-                try:
-                    r = architecture_floors(covs, dims, float(q), bn,
-                                            trace_normalize=args.trace_normalize)
-                except ValueError as e:
-                    print(f"  {arch} q={q:g} {'bn' if bn else 'nobn'}: {e}")
-                    continue
-                out[arch]["bn" if bn else "nobn"][f"{float(q):g}"] = r
-            r = out[arch]["bn" if bn else "nobn"].get(f"{float(args.epsilon_clamp_percentile):g}")
+            tag = "bn" if bn else "nobn"
+            if per_block and len(dims) > 1:
+                grid = architecture_floor_grid(covs, dims, args.percentiles, bn,
+                                               trace_normalize=args.trace_normalize)
+                out[arch][tag] = {percentile_key(qs): r for qs, r in grid.items()}
+            else:
+                for q in args.percentiles:
+                    try:
+                        r = architecture_floors(covs, dims, float(q), bn,
+                                                trace_normalize=args.trace_normalize)
+                    except ValueError as e:
+                        print(f"  {arch} q={q:g} {tag}: {e}")
+                        continue
+                    out[arch][tag][f"{float(q):g}"] = r
+            r = out[arch][tag].get(f"{float(args.epsilon_clamp_percentile):g}")
             if r:
                 print(f"  {arch:>10} {'with' if bn else 'without'} batch norm, "
                       f"q={args.epsilon_clamp_percentile:g}: --hidden-dims {arch} "
@@ -277,22 +329,31 @@ def write_floors(dataset: str, covs: np.ndarray, architectures: List[str], args)
                       + ", ".join(f"{100 * c:.0f}%" for c in r["clamped"]) + ")")
     path = floors_file(dataset, args.floors_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    kept: Dict[str, Any] = {}
+    if os.path.exists(path):              # other studies read the other architectures
+        with open(path) as f:
+            kept = json.load(f).get("architectures", {})
     meta = {"dataset": dataset, "percentiles": [float(q) for q in args.percentiles],
+            "per_block_percentiles": per_block,
             "frame": "spectrum entering each ReEig, random Stiefel BiMaps (seed 0)",
             "trace_normalize": args.trace_normalize, "max_subjects": args.max_subjects,
             "exclude_subjects": list(getattr(args, "exclude_subjects", [])),
             "max_samples": args.max_samples, "task": args.task,
             "estimator": args.estimator, "resample": args.resample,
             "generated": datetime.now().isoformat()}
-    with open(path, "w") as f:
-        json.dump({"meta": meta, "architectures": out}, f, indent=2, cls=NumpyEncoder)
+    tmp = f"{path}.tmp{os.getpid()}"
+    with open(tmp, "w") as f:
+        json.dump({"meta": meta, "architectures": {**kept, **out}}, f, indent=2,
+                  cls=NumpyEncoder)
+    os.replace(tmp, path)                 # a run reading the file never sees half of it
     print(f"  floors written: {path}")
     return path
 
 
-def floors_for(dataset: str, arch: str, batch_norm: bool, percentile: float,
+def floors_for(dataset: str, arch: str, batch_norm: bool, percentile,
                path: Optional[str] = None) -> str:
-    """The floors "e1,e2,..." of an architecture at a percentile, from the floors file.
+    """The floors "e1,e2,..." of an architecture at a percentile (one for every block,
+    or a list of one per block), from the floors file.
 
     Raises:
         FileNotFoundError: without the floors file.
@@ -300,7 +361,7 @@ def floors_for(dataset: str, arch: str, batch_norm: bool, percentile: float,
     """
     path = path or floors_file(dataset)
     arch = ",".join(str(int(x)) for x in str(arch).split(","))
-    q = f"{float(percentile):g}"
+    q = percentile_key(percentile)
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"{path} not found: run python -m rfl.experiments.analyze_covariances "
@@ -313,7 +374,8 @@ def floors_for(dataset: str, arch: str, batch_norm: bool, percentile: float,
         raise KeyError(f"{path}: no floors for --hidden-dims {arch} "
                        f"{'with' if batch_norm else 'without'} batch norm at the {q}th "
                        "percentile (rerun analyze_covariances with these --architectures "
-                       "and --percentiles)") from None
+                       "and --percentiles, and --per-block-percentiles for one "
+                       "percentile per block)") from None
     return ",".join(f"{x:g}" for x in floors)
 
 
@@ -606,6 +668,10 @@ def main(argv=None):
                         "write them for the plans (see --floors-dir).")
     p.add_argument("--percentiles", type=float, nargs="+", default=list(PERCENTILES),
                    help="Percentiles at which --architectures computes the floors.")
+    p.add_argument("--per-block-percentiles", action="store_true",
+                   help="With --architectures, also write every combination of "
+                        "--percentiles across the blocks of a deep architecture "
+                        "(--reeig-percentile q1 --reeig-percentile-2 q2).")
     p.add_argument("--floors-dir", type=str, default=None,
                    help="Folder of the floors files (default $RFL_RESULTS/reeig_floors).")
     p.add_argument("--epsilon-candidates", type=float, nargs="+",

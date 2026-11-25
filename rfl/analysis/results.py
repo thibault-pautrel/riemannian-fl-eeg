@@ -94,9 +94,12 @@ def arch_name(cfg: Dict[str, Any]) -> str:
     if model == "spdnet":
         name = "spdnet"
         if str(cfg.get("spdnet_hidden_dims") or "").strip():
-            q = cfg.get("spdnet_reeig_percentile")
-            floors = (f"q{float(q):g}" if q is not None
-                      else str(cfg.get('spdnet_epsilons') or '').replace(' ', ''))
+            q, q2 = cfg.get("spdnet_reeig_percentile"), cfg.get("spdnet_reeig_percentile_2")
+            if q is None:
+                floors = str(cfg.get('spdnet_epsilons') or '').replace(' ', '')
+            else:
+                floors = f"q{float(q):g}" + (f"-{float(q2):g}" if q2 is not None
+                                             and float(q2) != float(q) else "")
             name = f"spdnet_{str(cfg['spdnet_hidden_dims']).replace(' ', '')}_{floors}"
         if cfg.get("spdnet_use_batch_norm"):
             name += "_bn" + shared

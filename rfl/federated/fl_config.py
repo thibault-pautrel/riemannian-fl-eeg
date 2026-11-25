@@ -70,7 +70,8 @@ class FLConfig(ExperimentConfig):
     #   'projavg'  uf(sum_i w_i W_i)                           (RFedProj)
     #   'rlavg'    uf(W_t + sum_i w_i P_{W_t}(W_i - W_t))      (RFedRL)
     #   'retavg'   R_{W_t}(sum_i w_i R_{W_t}^{-1}(W_i))        (PriRFed baseline)
-    # SPDNet takes one of the last three, which keep the BiMap weights on the Stiefel
+    #   'pseavg'   E_{W_t}(sum_i w_i E_{W_t}^{-1}(W_i))        (PseAvg, pseudo-exponential)
+    # SPDNet takes one of the last four, which keep the BiMap weights on the Stiefel
     # manifold (the other SPDNet parameters are averaged). EEGNet takes fedavg. Any
     # other pairing is refused. None: 'projavg' for SPDNet, 'fedavg' for EEGNet.
     # Other means on St(n, p) are registered by name in aggregation.AGGREGATION_RULES.
@@ -133,7 +134,7 @@ class FLConfig(ExperimentConfig):
     fl_head_refit_epochs: str = ""
     # Weight decays tried by the re-fit, comma-separated.
     fl_head_refit_weight_decays: str = "0"
-    # Adam learning rate of the re-fit. None uses learning_rate.
+    # Learning rate of the re-fit. None uses learning_rate.
     fl_head_refit_lr: float | None = None
     # Candidate selection, per client, on its validation accuracy (loss breaks ties):
     #   'fixed'          first weight decay, last epoch of the grid, no selection.
@@ -149,7 +150,7 @@ class FLConfig(ExperimentConfig):
     #   'step'     lr for the first 70% of the rounds (at least one), then 0.3 lr
     #   'plateau'  lr *= lr_plateau_factor after lr_plateau_patience rounds without a
     #              strict improvement of selection_metric, floored at lr_min
-    # Adam is rebuilt every round, so the schedule applies exactly.
+    # The optimiser is rebuilt every round, so the schedule applies exactly.
 
     # ==================== Differential privacy ====================
     # Record-level DP over the trained parameters, substitution adjacency. Each local

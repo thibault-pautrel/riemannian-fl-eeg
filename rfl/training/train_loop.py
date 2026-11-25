@@ -17,9 +17,10 @@ only matters for the record of the best epoch. With these rules on, 'val_loss' i
 often the better choice: accuracy on a small validation split ties often, and a tie
 counts as no improvement.
 
-SPDNet is trained with Adam on the Euclidean gradient of the BiMap weights, followed by
-the polar projection of the weights onto the Stiefel manifold after every step
-(`SPDNet.project_stiefel`). The gradient itself is not projected on the tangent space.
+SPDNet is trained with `config.optimizer` (Adam or SGD). With --stiefel projection the
+step uses the Euclidean gradient of the BiMap weights and is followed by the polar
+projection onto the Stiefel manifold (`SPDNet.project_stiefel`). With --stiefel
+trivialization the library's orthogonal parametrization keeps the weights orthonormal.
 The federated non-private clients use the same step (rfl/federated/client.py).
 
 Schedules ('none', 'cosine', 'step', 'plateau') come from rfl/utils/schedules.py, the

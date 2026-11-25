@@ -15,6 +15,8 @@ Where each function is used:
                               clipping) and of the ambient noise in the DP mechanism.
     lifting, retraction       RLAvg (RFedRL).
     inverse_polar_retraction  RetAvg (the PriRFed baseline).
+    pseudo_log, pseudo_exp    PseAvg (L.-F. Marignier), a geometry of St(n, p) close to
+                              Gr(n, p) x O(p).
 
 The lifting of RLAvg is a first-order approximation of the inverse retraction. Its
 error is O(eps^2) in the distance between the base point and the client point. The
@@ -26,6 +28,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+import scipy.linalg
 import torch
 
 __all__ = [
@@ -34,12 +38,13 @@ __all__ = [
     "lifting",
     "retraction",
     "inverse_polar_retraction",
+    "pseudo_exp",
+    "pseudo_log",
 ]
 
 
-
 class RetractionNotInvertible(ValueError):
-    """A client point lies where the polar retraction cannot be inverted (RetAvg).
+    """A client point lies where the inverse map of RetAvg or PseAvg is not defined.
 
     Training has moved too far in one round, typically with a learning rate too large:
     the run is recorded as diverged (rfl/training/divergence.py).
@@ -212,15 +217,88 @@ def inverse_polar_retraction(W: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
 
 
 def _solve_lyapunov_spd(M: torch.Tensor, Q: torch.Tensor) -> torch.Tensor:
-    """Solve M S + S M^T = Q in Kronecker form, (I (x) M + M (x) I) vec(S) = vec(Q).
+    """Solve M S + S M^T = Q by the Bartels-Stewart algorithm, O(p^3), in float64.
 
-    The p^2 x p^2 system is non-singular when no two eigenvalues of M sum to zero,
-    which eigenvalues with positive real parts guarantee. BiMap blocks are small (p <= ~20), so a direct
-    solve is cheap and accurate. M is not symmetric in general, so diagonalising
-    its symmetric part would not be valid.
+    The solution is unique when no two eigenvalues of M sum to zero, which eigenvalues
+    with positive real parts guarantee. A dense Kronecker solve would cost O(p^6),
+    which is too slow for a BiMap of output dimension 32.
     """
-    p = M.shape[0]
-    eye = torch.eye(p, dtype=M.dtype, device=M.device)
-    K = torch.kron(eye, M) + torch.kron(M, eye)
-    s = torch.linalg.solve(K, Q.reshape(-1))
-    return s.reshape(p, p)
+    S = scipy.linalg.solve_continuous_lyapunov(M.double().cpu().numpy(),
+                                               Q.double().cpu().numpy())
+    return torch.from_numpy(S).to(device=M.device, dtype=M.dtype)
+
+
+# --------------------------------------------------------------------------- #
+#  PseAvg: a geometry where the subspace and the rotation are separate
+# --------------------------------------------------------------------------- #
+def _skew(A: torch.Tensor) -> torch.Tensor:
+    return 0.5 * (A - A.T)
+
+
+def pseudo_exp(W: torch.Tensor, V: torch.Tensor) -> torch.Tensor:
+    """Pseudo-exponential at W of the tangent vector V = H + W Omega.
+
+    Omega = skew(W^T V) is the vertical part and H = V - W Omega the horizontal part.
+    The result is Exp^Gr_W(H) exp(Omega): the Grassmann geodesic of H, with the basis
+    then turned by the rotation exp(Omega). The two parts never mix.
+
+    Args:
+        W: Base point on St(n, p).
+        V: Tangent vector at W, same shape as W.
+
+    Returns:
+        A point of St(n, p), in the dtype of W.
+    """
+    W64, V64 = W.detach().double(), V.detach().double()
+    omega = _skew(W64.T @ V64)
+    U, sigma, Zt = torch.linalg.svd(V64 - W64 @ omega, full_matrices=False)
+    grass = (W64 @ Zt.T) * torch.cos(sigma) @ Zt + (U * torch.sin(sigma)) @ Zt
+    return (grass @ torch.linalg.matrix_exp(omega)).to(W.dtype)
+
+
+def pseudo_log(W: torch.Tensor, Y: torch.Tensor, tol: float = 1e-6) -> torch.Tensor:
+    """Pseudo-logarithm, the inverse of `pseudo_exp`: the V at W with pseudo_exp(W, V) = Y.
+
+    With W^T Y = A diag(s) B^T (SVD), P = A B^T is the rotation part and Y P^T spans
+    span(Y) with W^T (Y P^T) symmetric positive definite. The horizontal part is the
+    Grassmann logarithm U arctan(Sigma) Z^T, from the SVD of Y (W^T Y)^{-1} - W, and
+    the vertical part is W log(P).
+
+    Args:
+        W: Base point on St(n, p).
+        Y: Target point on St(n, p), same shape as W.
+        tol: Smallest cosine of a principal angle, relative to the largest, and
+            distance of a rotation angle to pi.
+
+    Returns:
+        The tangent vector V at W, in the dtype of W.
+
+    Raises:
+        ValueError: If the shapes differ or the matrices are wide.
+        RetractionNotInvertible: If span(Y) has a direction orthogonal to span(W)
+            (Grassmannian part), if det(P) < 0 (orientation), or if P has a rotation
+            angle of pi (no principal logarithm).
+    """
+    if W.shape != Y.shape:
+        raise ValueError(f"shape mismatch: W {tuple(W.shape)} vs Y {tuple(Y.shape)}")
+    if W.shape[0] < W.shape[1]:
+        raise ValueError(f"pseudo_log expects tall (n >= p) matrices, got {tuple(W.shape)}.")
+    W64, Y64 = W.detach().double(), Y.detach().double()
+    A, s, Bt = torch.linalg.svd(W64.T @ Y64)
+    if s[-1] <= tol * s[0]:
+        raise RetractionNotInvertible(
+            f"pseudo_log: Grassmannian part undefined, cos(theta_max) = {s[-1] / s[0]:.2e}")
+    P = A @ Bt
+    if torch.linalg.det(P) < 0:
+        raise RetractionNotInvertible(
+            "pseudo_log: rotation part undefined, det(P) < 0 (opposite orientation)")
+    P_np = P.cpu().numpy()
+    angle = float(np.abs(np.angle(np.linalg.eigvals(P_np))).max(initial=0.0))
+    if angle > math.pi - tol:
+        raise RetractionNotInvertible(
+            f"pseudo_log: rotation part undefined, rotation angle {angle:.4f} (pi)")
+    omega = _skew(torch.from_numpy(np.real(scipy.linalg.logm(P_np))).to(P))
+    G = Y64 @ ((Bt.T / s) @ A.T) - W64                 # Y (W^T Y)^{-1} - W
+    U, sigma, Zt = torch.linalg.svd(G, full_matrices=False)
+    horizontal = (U * torch.arctan(sigma)) @ Zt
+    return (horizontal + W64 @ omega).to(W.dtype)

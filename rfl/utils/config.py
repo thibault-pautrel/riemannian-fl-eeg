@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 # Defaults of the inter-subject fields, left out of to_dict (see there).
 TARGET_DEFAULTS = {"target_subjects": [], "target_role": "adapt", "target_ns": []}
+# Fields added later, left out of to_dict at these defaults for the same reason.
+LATER_DEFAULTS = {**TARGET_DEFAULTS, "spdnet_reeig_percentile_2": None}
 
 
 @dataclass
@@ -158,6 +160,9 @@ class ExperimentConfig:
     # Percentile q of --reeig-percentile, when the floors spdnet_epsilons come from the
     # floors file of analyze_covariances (None: floors given directly or by default).
     spdnet_reeig_percentile: Optional[float] = None
+    # Percentile of the floor of block 2 when it differs (--reeig-percentile-2): then
+    # spdnet_reeig_percentile sets block 1 only.
+    spdnet_reeig_percentile_2: Optional[float] = None
 
     # ==================== Training ====================
     epochs: int = 300                   # centralised only (FL runs use fl_rounds)
@@ -426,11 +431,12 @@ class ExperimentConfig:
     def to_dict(self) -> Dict[str, Any]:
         """All dataclass fields as a dict.
 
-        The inter-subject fields are left out at their defaults, so that the hash and
-        the config.json of a within-subject run are those of the code before them.
+        The inter-subject fields, and the other fields of LATER_DEFAULTS, are left out
+        at their defaults, so that the hash and the config.json of a run that does not
+        use them are those of the code before them.
         """
         d = asdict(self)
-        for key, default in TARGET_DEFAULTS.items():
+        for key, default in LATER_DEFAULTS.items():
             if d.get(key) == default:
                 d.pop(key, None)
         return d

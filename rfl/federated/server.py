@@ -4,10 +4,12 @@ One call to `FLServer.run_round` does the following.
 
 1. Sample the participating clients and broadcast the global state to them. Clients
    keep their local keys (normalisation layers, personal head).
-2. Each participant trains locally: Adam in `FLClient`, or the DP step of
-   `DPFLClient` (per-sample tangent clipping plus noise) when `config.dp_enabled`.
+2. Each participant trains locally: `config.optimizer` (Adam or SGD) in `FLClient`, or
+   the DP step of `DPFLClient` (per-sample tangent clipping plus noise) when
+   `config.dp_enabled`.
 3. Aggregate the returned state dicts with `config.fl_aggregation` (fedavg, projavg,
-   rlavg or retavg, see rfl/federated/aggregation.py) and update the global model.
+   rlavg, retavg or pseavg, see rfl/federated/aggregation.py) and update the global
+   model.
 4. Evaluate the global model on the validation and test split of every client.
 
 Metrics. The main metrics are pooled over the union of the clients' predictions
@@ -439,6 +441,12 @@ class FLServer:
                 logger.info(f"  [Client {client.client_id}] train loss={metrics['train_loss']:.4f} "
                       f"acc={metrics['train_acc']:.4f}")
 
+        # A diverged client stops the run before its weights reach the aggregation, where
+        # a NaN would raise another error than a divergence (rfl/training/divergence.py).
+        if checked_losses:
+            from rfl.training.divergence import check_finite
+            check_finite(float(np.mean(checked_losses)), f"round {round_num}")
+
         # ---- 2. aggregate ------------------------------------------------------
         # Same client weights for every rule.
         weights = (client_sizes if self.config.fl_weight_by_samples
@@ -474,9 +482,6 @@ class FLServer:
         global_test_acc, global_test_f1 = ev['global_test_acc'], ev['global_test_f1']
         global_test_loss = ev['global_test_loss']
 
-        if checked_losses:
-            from rfl.training.divergence import check_finite
-            check_finite(float(np.mean(checked_losses)), f"round {round_num}")
         metrics = {
             'round': round_num,
             'current_lr': current_lr,
