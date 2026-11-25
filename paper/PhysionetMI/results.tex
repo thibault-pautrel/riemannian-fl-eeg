@@ -1,0 +1,24 @@
+\documentclass[a4paper]{article}
+\usepackage[margin=1.5cm]{geometry}
+\usepackage{booktabs,graphicx,pgfplots}
+\usepgfplotslibrary{groupplots}
+\pgfplotsset{compat=1.16}
+\title{Results on PhysionetMI}
+\date{\today}
+\begin{document}
+\maketitle
+\section{Batch norm}
+\begin{table}[htbp]\centering
+\caption{Batch-norm study: client mean test accuracy (\%), mean $\pm$ std over the seeds. Best mean of each row and network in bold.}
+\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\input{tab_bn}}
+\end{table}
+\begin{table}[htbp]\centering
+\caption{Batch-norm study, SPDNet, subject clients: test accuracy of each subject (\%). Best mean of each row in bold.}
+\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\input{tab_bn_clients_spdnet}}
+\end{table}
+\begin{figure}[htbp]\centering
+\input{fig_bn_rounds}
+\caption{Batch-norm study, subject clients, federated arms: client mean test accuracy against the communication round, mean over the seeds. A seed that stopped keeps its last value.}
+\end{figure}
+\clearpage
+\end{document}

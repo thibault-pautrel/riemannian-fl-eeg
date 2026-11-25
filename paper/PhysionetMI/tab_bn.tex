@@ -1,0 +1,17 @@
+\begin{tabular}{llcc}
+\toprule
+ & & \multicolumn{2}{c}{SPDNet} \\
+\cmidrule(lr){3-4}
+Clients & Head & BN (FedBN) & shared BN \\
+\midrule
+subject & Local & $\mathbf{50.2} \pm 1.7$ & -- \\
+ & FedPer & $\mathbf{51.4} \pm 1.3$ & $39.3 \pm 1.9$ \\
+ & Shared head & $\mathbf{44.8} \pm 0.9$ & $37.7 \pm 2.4$ \\
+\midrule
+IID & Local & $\mathbf{26.7} \pm 0.7$ & -- \\
+ & FedPer & $\mathbf{28.0} \pm 1.4$ & $27.6 \pm 1.0$ \\
+ & Shared head & $40.8 \pm 1.4$ & $\mathbf{42.2} \pm 1.0$ \\
+\midrule
+-- & Centralised & $\mathbf{44.0} \pm 1.4$ & -- \\
+\bottomrule
+\end{tabular}
