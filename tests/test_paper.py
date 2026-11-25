@@ -61,11 +61,6 @@ def _fake(root, rng):
                          f"fed_{model}_fedper_{norm}_{tag}", seed,
                          {**net(model, norm), "fl_local_fc": True,
                           "train_trials_per_class": n}, list(rng.uniform(0.3, 0.7, 3)))
-                if model == "spdnet":
-                    for mode in ("local", "pooled"):
-                        _run(root, "mi_DS_datasize_tslr", f"tslr_{mode}_{tag}", seed,
-                             {"model_type": "tslr", "tslr_mode": mode,
-                              "train_trials_per_class": n}, list(rng.uniform(0.3, 0.7, 3)))
 
 
 def test_paper_writes_every_table_and_figure(tmp_path):
@@ -87,5 +82,5 @@ def test_paper_writes_every_table_and_figure(tmp_path):
     per = (out / "tab_bn_clients_spdnet.tex").read_text()
     assert all(f"\n{s} &" in per for s in SUBJECTS) and "Mean &" in per
     ds = (out / "tab_datasize.tex").read_text()
-    assert "\\emph{TS+LR}" in ds and "Pooled re-centred" in ds and "& all \\\\" in ds
+    assert "\\emph{SPDNet}" in ds and "TS+LR" not in ds and "& all \\\\" in ds
     assert "xticklabels={5,10,all}" in (out / "fig_datasize.tex").read_text()

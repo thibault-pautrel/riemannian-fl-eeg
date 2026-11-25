@@ -3,7 +3,7 @@
     python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001
 
 Reads the final runs of one dataset under $RFL_RESULTS (mi_<dataset>_bn, _bn_eegnet,
-_datasize, _datasize_eegnet, _datasize_tslr, _loso, _loso_eegnet, _loso_tslr) and writes,
+_datasize, _datasize_eegnet, _loso, _loso_eegnet, _loso_tslr) and writes,
 for the studies that have runs:
 
     tab_bn.tex                 batch norm: client mean test accuracy of every arm
@@ -51,8 +51,7 @@ HEADS = {"local": "Local", "fedper": "FedPer", "shared": "Shared head",
          "central": "Centralised"}
 NORMS = {"nobn": "no BN", "bn": "BN (FedBN)", "shared": "shared BN"}
 # Colour: paradigm and head. Line and mark: normalisation.
-COLOURS = {"rflTslr": "52514E", "rflPooled": "A3A29C", "rflLocal": "EB6834",
-           "rflShared": "2A78D6", "rflFedper": "1BAF7A"}
+COLOURS = {"rflLocal": "EB6834", "rflShared": "2A78D6", "rflFedper": "1BAF7A"}
 HEAD_COLOUR = {"local": "rflLocal", "fedper": "rflFedper", "shared": "rflShared"}
 NORM_LINE = {"bn": ("solid", "*"), "shared": ("dashed", "square*"),
              "nobn": ("densely dotted", "triangle*"), "": ("solid", "diamond*")}
@@ -290,10 +289,6 @@ def _datasize_rows(df: pd.DataFrame) -> pd.DataFrame:
     t = t[t.scenario == "U"].copy()
 
     def head(f: str) -> str:
-        if "Pooled" in f:
-            return "pooled"
-        if "TS+LR" in f:
-            return "tslr"
         if f.startswith("Local"):
             return "local"
         return "refit" if "re-fitted" in f else "shared" if "shared head" in f else "fedper"
@@ -305,14 +300,12 @@ def _datasize_rows(df: pd.DataFrame) -> pd.DataFrame:
     return t
 
 
-DS_HEADS = {"tslr": "Local", "pooled": "Pooled re-centred", "local": "Local",
-            "fedper": "FedPer", "shared": "Shared head"}
-DS_COLOUR = {"tslr": "rflTslr", "pooled": "rflPooled", **HEAD_COLOUR}
-NORM_ORDER = ["", "nobn", "bn", "shared"]
+DS_HEADS = {"local": "Local", "fedper": "FedPer", "shared": "Shared head"}
+NORM_ORDER = ["nobn", "bn", "shared"]
 
 
 def datasize_table(t: pd.DataFrame) -> List[str]:
-    """Rows: curves, by block (TS+LR, then each network). Columns: N, then all."""
+    """Rows: curves, one block per network. Columns: N, then all."""
     ns = sorted(t.N.unique())
     names = ["all" if not np.isfinite(n) else f"{n:g}" for n in ns]
     n_max = int(t["count"].max())
@@ -320,7 +313,7 @@ def datasize_table(t: pd.DataFrame) -> List[str]:
              " & & \\multicolumn{" + str(len(ns)) + "}{c}{trials per class and subject} \\\\",
              f"\\cmidrule(lr){{3-{2 + len(ns)}}}",
              "Head & Normalisation & " + " & ".join(names) + " \\\\"]
-    for model, title in (("tslr", "TS+LR"), *MODELS.items()):
+    for model, title in MODELS.items():
         b = t[t.model == model]
         if b.empty:
             continue
@@ -339,7 +332,7 @@ def datasize_table(t: pd.DataFrame) -> List[str]:
 
 
 def datasize_figure(t: pd.DataFrame, path: Path) -> bool:
-    """Accuracy against N, one panel per network, with the TS+LR curves on each."""
+    """Accuracy against N, one panel per network."""
     nets = [m for m in MODELS if m in set(t.model)]
     if not nets:
         return False
@@ -350,12 +343,12 @@ def datasize_figure(t: pd.DataFrame, path: Path) -> bool:
     labels = [f"{n:g}" for n in ns] + (["all"] if has_all else [])
     panels, used = [], set()
     for m in nets:
-        sub = t[t.model.isin([m, "tslr"])]
+        sub = t[t.model == m]
         series = []
         for (h, nk), g in sub.groupby(["head", "normkey"]):
             g = g.sort_values("N")
             dash, mark = NORM_LINE[nk]
-            series.append({"style": f"{DS_COLOUR[h]}, thick, {dash}, mark={mark}, "
+            series.append({"style": f"{HEAD_COLOUR[h]}, thick, {dash}, mark={mark}, "
                                     "mark size=1.5pt, mark options={solid}",
                            "x": [x_all if not np.isfinite(n) else n for n in g.N],
                            "y": g["mean"].tolist(), "err_lo": g["se"].tolist(),
@@ -368,8 +361,7 @@ def datasize_figure(t: pd.DataFrame, path: Path) -> bool:
                        "ymin": math.floor((sub["mean"] - sub["se"].fillna(0)).min() / 5) * 5,
                        "ymax": math.ceil((sub["mean"] + sub["se"].fillna(0)).max() / 5) * 5,
                        "series": series})
-    legend = [(("TS+LR, " + DS_HEADS[h].lower()) if h in ("tslr", "pooled") else DS_HEADS[h],
-               f"{DS_COLOUR[h]}, line width=2pt")
+    legend = [(DS_HEADS[h], f"{HEAD_COLOUR[h]}, line width=2pt")
               for h in DS_HEADS if any(u[0] == h for u in used)]
     legend += [(NORMS[n], f"black!70, thick, {NORM_LINE[n][0]}, mark={NORM_LINE[n][1]}, "
                           "mark options={solid}")
@@ -472,7 +464,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 _write(out / f"tab_bn_clients_{m}.tex", lines)
         bn_rounds(bn, out / "fig_bn_rounds.tex")
 
-    ds = final_runs(root, a.dataset, ("datasize", "datasize_eegnet", "datasize_tslr"))
+    ds = final_runs(root, a.dataset, ("datasize", "datasize_eegnet"))
     if ds is not None:
         t = _datasize_rows(ds)
         _write(out / "tab_datasize.tex", datasize_table(t))
