@@ -37,7 +37,9 @@ Other
     location. Two runs with the same ``config_id`` differ only by their seed, so a
     group of runs should hold each seed at most once (see ``duplicate_seeds``).
     ``agg_ms``: median aggregation time per round, in milliseconds.
-    ``n_steps``: rounds or epochs actually run. ``path``: directory of the run.
+    ``n_steps``: rounds or epochs actually run. ``sel_round``: the reported (selected)
+    round of a federated run, ``hit_budget``: it ran out of rounds before early
+    stopping. ``path``: directory of the run.
 
 ``arch`` names the architecture together with its normalisation: ``spdnet``,
 ``spdnet_<widths>_<floors>`` when the blocks are given explicitly, with ``_bn`` for the
@@ -75,7 +77,7 @@ METRIC_COLUMNS = ["test_acc", "test_f1", "last_test_acc", "val_acc", "val_loss",
                   "client_mean_acc", "client_min_acc",
                   "refit_test_acc", "refit_test_f1",
                   "reduced_val_acc", "reduced_test_acc", "reduced_refit_test_acc",
-                  "C", "sigma", "mu0", "realized_eps", "agg_ms", "n_steps"]
+                  "C", "sigma", "mu0", "realized_eps", "agg_ms", "n_steps", "sel_round"]
 
 
 def _num(x: Any) -> float:
@@ -172,6 +174,8 @@ def _federated_row(r: Dict[str, Any]) -> Dict[str, Any]:
         "mu0": _num(dp.get("mu0")),
         "realized_eps": _num(dp.get("realized_eps")),
         "n_steps": len(hist.get("round") or []),
+        "sel_round": _num((r.get("selection") or {}).get("round")),
+        "hit_budget": bool((r.get("selection") or {}).get("hit_budget", False)),
     }
     agg = [x for x in (hist.get("agg_seconds") or []) if x is not None]
     row["agg_ms"] = 1000.0 * float(np.median(agg)) if agg else math.nan
@@ -281,7 +285,8 @@ def load_runs(*roots: str) -> pd.DataFrame:
         raise FileNotFoundError(f"no fl_results.json or centralized_results.json under "
                                 f"{list(roots)}")
     df = pd.DataFrame(rows)
-    return df.reindex(columns=ID_COLUMNS + METRIC_COLUMNS + ["diverged", "config_id", "path"])
+    return df.reindex(columns=ID_COLUMNS + METRIC_COLUMNS
+                      + ["diverged", "hit_budget", "config_id", "path"])
 
 
 def load_curve(path: str, key: str = "test_acc") -> np.ndarray:

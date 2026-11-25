@@ -81,6 +81,7 @@ within 3000 rounds, and the model of the lowest validation loss is reported.
 | `mi_datasize` (`_eegnet`, `_tslr`) | From how many trials per class does federation beat local training? |
 | `mi_study` | All of them, for one dataset |
 | `mi_loso` (`_eegnet`, `_tslr`, `_study`) | What does a model trained on other subjects give a new subject, with N calibration trials? |
+| `mi_agg` (`_calib`) | How do the Stiefel aggregation rules interact with the client partition, the participation and the number of local epochs (two-block SPDNet, FedPer + FedBN)? |
 
 ```bash
 export RFL_DATASET=BNCI2014_001
@@ -91,6 +92,7 @@ python -m rfl.analysis.report results/mi_BNCI2014_001_bn/final \
 python -m rfl.analysis.stats results/mi_BNCI2014_001_bn/final --factor arch --by kind clients scope
 python -m rfl.analysis.datasize results/mi_BNCI2014_001_datasize*/final --out datasize --pairs
 python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001   # LaTeX tables and figures
+python -m rfl.analysis.aggregation results/mi_BNCI2014_001_agg/final --out agg   # mi_agg
 ```
 
 On an HTCondor cluster, `bash condor/submit_dag.sh mi_study` runs the same pipeline as

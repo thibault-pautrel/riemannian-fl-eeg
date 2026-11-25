@@ -15,6 +15,31 @@
 | `--no-fedbn` | share the normalisation layers (default: kept on each client, FedBN) |
 | `--client-partition iid` | trials dealt at random to the clients instead of one subject per client |
 
+## Aggregation rules (SPDNet)
+
+The server averages the BiMap weights W_i of the clients on the Stiefel manifold, with
+W_t the current global weight:
+
+| `--aggregation` | Rule |
+|---|---|
+| `projavg` (default) | polar factor of the mean, uf(sum_i w_i W_i) |
+| `rlavg` | uf(W_t + sum_i w_i P_{W_t}(W_i - W_t)), first-order lifting at W_t |
+| `retavg` | R_{W_t}(sum_i w_i R_{W_t}^{-1}(W_i)), exact inverse polar retraction (PriRFed) |
+| `pseavg` | the same with the pseudo-exponential of L.-F. Marignier, where the subspace (Grassmann) and the rotation (O(p)) of W are separate |
+
+`retavg` and `pseavg` need every client inside the domain of their inverse map at W_t.
+A client outside it ends the run as diverged (too large a learning rate or too many
+local epochs), and the selection then leaves its cell out.
+
+## Deep SPDNet and ReEig floors
+
+`--hidden-dims 32,16` stacks two blocks, each BiMap -> ReEig, with an SPD batch norm
+after each ReEig under `--use-batch-norm`. `--reeig-percentile Q` sets every floor to
+the Q-th percentile of the spectrum its ReEig acts on, from the floors file of
+`analyze_covariances --architectures 32,16`. `--reeig-percentile-2 Q2` gives block 2
+its own percentile (Q then sets block 1 only). It needs a floors file written with
+`--per-block-percentiles`.
+
 ## SPD batch norm
 
 `--use-batch-norm` adds the SPD batch norm of Gallet et al. (*On batch normalization for

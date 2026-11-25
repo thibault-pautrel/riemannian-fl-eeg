@@ -460,10 +460,12 @@ class Protocol:
             print("warning: selections on the edge of their grid (extend the grid and "
                   "rerun the sweep?):\n  " + "\n  ".join(edges), file=sys.stderr)
         # Final runs of an earlier selection would be mixed with these in the reports.
+        # The folders of arms outside this protocol (another subset of a plan) are not.
         current = {(j.arm, j.hp_name) for j in jobs}
+        arms = {j.arm for j in jobs}
         root = results_root() / self.name / "final"
         stale = sorted(str(d) for a in (root.iterdir() if root.exists() else [])
-                       if a.is_dir() for d in a.iterdir()
+                       if a.is_dir() and a.name in arms for d in a.iterdir()
                        if d.is_dir() and (a.name, d.name) not in current)
         if stale:
             print(f"warning: {len(stale)} final folder(s) come from an earlier selection "

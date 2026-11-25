@@ -1,0 +1,188 @@
+"""The aggregation study (plans mi_agg_calib and mi_agg): floors, calibration, arms."""
+import importlib
+import json
+
+import pytest
+
+from rfl.experiments import grid as G
+
+
+@pytest.fixture
+def plans(monkeypatch):
+    """The two plans, imported for one dataset and a subset of the factors."""
+    import rfl.experiments.plans.mi_agg as main
+    import rfl.experiments.plans.mi_agg_calib as calib
+
+    def load(dataset, **env):
+        monkeypatch.setenv("RFL_DATASET", dataset)
+        for k, v in env.items():
+            monkeypatch.setenv(k, v)
+        importlib.reload(calib)
+        importlib.reload(main)
+        return calib, main
+    yield load
+    for k in ("RFL_DATASET", "RFL_AGG_RULES", "RFL_AGG_CLIENTS", "RFL_AGG_PARTICIPATION",
+              "RFL_AGG_EPOCHS"):
+        monkeypatch.delenv(k, raising=False)
+    importlib.reload(calib)
+    importlib.reload(main)
+
+
+def _parse(job):
+    if job.entry == "fed":
+        from rfl.experiments.run_federated_experiment import _build_arg_parser
+    else:
+        from rfl.experiments.run_centralized_experiment import _build_arg_parser
+    return _build_arg_parser().parse_args(job.runner_args() + ["--save-dir", "x"])
+
+
+def _write_floors(dataset, archs):
+    """A floors file as analyze_covariances --per-block-percentiles writes it."""
+    from rfl.experiments.analyze_covariances import PERCENTILES, percentile_key
+    pairs = [(a, b) for a in PERCENTILES for b in PERCENTILES]
+    out = {a: {"nobn": {}, "bn": {percentile_key([q1, q2]): {"floors": [1e-4 * q1, 0.01 * q2]}
+                                  for q1, q2 in pairs}} for a in archs}
+    path = G.results_root() / "reeig_floors" / f"{dataset}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"meta": {}, "architectures": out}))
+
+
+def _score(j):   # best: lr 0.1, batch 32, q1 5, q2 30, momentum 0.3, blocks 32,16
+    hp = j.hp
+    return (0.5 + 0.1 * (j.lr == 0.1) + 0.05 * (j.batch_size == 32)
+            + 0.01 * (hp.get("--reeig-percentile") == 5)
+            + 0.01 * (hp.get("--reeig-percentile-2") == 30)
+            + 0.01 * (hp.get("--bn-momentum") == 0.3) + 0.03 * ("a32_16" in j.arm))
+
+
+def _fake(job, val_acc):
+    job.save_dir.mkdir(parents=True, exist_ok=True)
+    if job.entry == "fed":
+        r = {"config": {"dataset": "D", "model_type": "spdnet", "learning_rate": job.lr,
+                        "batch_size": job.batch_size, "fl_rounds": job.horizon,
+                        "seed": job.seed},
+             "final_metrics": {"global_val_acc": val_acc, "global_test_acc": 0.5},
+             "last_round_metrics": {}, "round_history": {}}
+        (job.save_dir / "fl_results.json").write_text(json.dumps(r))
+        return
+    r = {"config": {"dataset": "D", "model_type": "spdnet", "learning_rate": job.lr,
+                    "batch_size": job.batch_size, "epochs": job.horizon, "seed": job.seed},
+         "training": {"report_rule": "selected", "best_val_acc": val_acc,
+                      "best_val_loss": 1.0, "final_epoch": job.horizon},
+         "test_metrics": {"accuracy": 0.5, "f1_macro": 0.5}}
+    (job.save_dir / "centralized_results.json").write_text(json.dumps(r))
+
+
+def _run_stage(plan, stage, n):
+    jobs = G.plan_jobs(plan, stage, check=True)
+    assert len(jobs) == n, (plan, stage, len(jobs))
+    for j in jobs:
+        _fake(j, _score(j))
+    assert G.main([plan, "--stage", stage, "--select"]) == 0
+    return jobs
+
+
+def test_schedule_keeps_the_reference_rule_and_scales_with_participation_and_epochs():
+    from rfl.experiments.plans.mi_agg import schedule
+    assert schedule(100, 1, 52) == {"plateau": 20, "stop": 150, "budget": 3000}
+    assert schedule(100, 10, 52) == {"plateau": 5, "stop": 30, "budget": 300}
+    assert schedule(100, 100, 52) == {"plateau": 5, "stop": 30, "budget": 300}
+    # 9 clients at 10 %: one client per round, pe = 1/9.
+    assert schedule(10, 1, 9) == {"plateau": 180, "stop": 1350, "budget": 27000}
+    assert schedule(10, 100, 9) == {"plateau": 45, "stop": 270, "budget": 2700}
+    # 52 clients at 25 %: 13 per round.
+    assert schedule(25, 1, 52) == {"plateau": 80, "stop": 600, "budget": 12000}
+
+
+def test_calibration_then_every_arm_tuned_alike(plans):
+    calib, main = plans("Cho2017", RFL_AGG_RULES="projavg,pseavg", RFL_AGG_CLIENTS="subj,iid",
+                        RFL_AGG_PARTICIPATION="25,100", RFL_AGG_EPOCHS="1,10")
+    archs = calib.STUDY["Cho2017"]["architectures"]
+    with pytest.raises(SystemExit, match="no per-block ReEig floors"):
+        G.plan_jobs("mi_agg_calib", "sweep1")
+    assert "--per-block-percentiles" in calib.floors_command()
+    _write_floors("Cho2017", archs)
+    assert calib.floors_ready()
+    with pytest.raises(SystemExit, match="not found"):
+        G.plan_jobs("mi_agg", "sweep1")                     # calibrate first
+    c1 = _run_stage("mi_agg_calib", "sweep1", 4 * 12 * 3)
+    for j in c1:
+        ns = _parse(j)
+        assert ns.reeig_percentile == 15 and ns.reeig_percentile_2 == 15
+        assert ns.bn_momentum == 0.1 and ns.epochs == 3000 and ns.early_stopping_patience == 150
+    c2 = _run_stage("mi_agg_calib", "sweep2", 4 * 9 * 3)
+    assert {(j.hp["--reeig-percentile"], j.hp["--reeig-percentile-2"]) for j in c2} == \
+        {(a, b) for a in (15, 5, 30) for b in (15, 5, 30)}
+    # The edges extend by the listed percentiles; finish the extended cells.
+    from rfl.experiments.pipeline import advance
+    while (todo := advance("mi_agg_calib", "sweep2", verbose=False)):
+        for j in todo:
+            _fake(j, _score(j))
+    _run_stage("mi_agg_calib", "sweep3", 4 * 3 * 3)
+    while (todo := advance("mi_agg_calib", "sweep3", verbose=False)):
+        for j in todo:
+            _fake(j, _score(j))
+    s1 = G.plan_jobs("mi_agg", "sweep1", check=True)
+    arms = {j.arm for j in s1}
+    assert len(arms) == 2 * 2 * 2 * 2 and len(s1) == len(arms) * 12 * 3
+    assert "fed_spdnet_pseavg_fedper_iid_p25_e10" in arms
+    for j in s1:
+        ns = _parse(j)
+        assert ns.hidden_dims == "32,16" and ns.use_batch_norm and ns.fedbn and ns.local_fc
+        assert ns.reeig_percentile == 5 and ns.bn_momentum == 0.3
+        assert ns.reeig_percentile_2 == 30
+        assert ns.optimizer == "sgd" and ns.stiefel == "trivialization"
+        assert ns.lr_schedule == "plateau" and ns.selection_metric == "val_loss"
+        assert ns.report == "selected"
+        pct, e = (int(x[1:]) for x in j.arm.split("_")[-2:])
+        s = main.schedule(pct, e, 52)
+        assert ns.rounds == s["budget"] and ns.early_stop_patience == s["stop"]
+        assert ns.lr_plateau_patience == s["plateau"]
+        assert ns.client_fraction == pct / 100 and ns.local_epochs == e
+        assert (ns.client_partition == "iid") == ("_iid_" in j.arm)
+    for j in s1:
+        _fake(j, _score(j))
+    assert G.main(["mi_agg", "--stage", "sweep1", "--select"]) == 0
+    final = G.plan_jobs("mi_agg", "final")
+    assert len(final) == len(arms) * 10
+    assert all(j.lr == 0.1 and j.batch_size == 32 for j in final)
+
+
+def test_a_subset_leaves_the_other_arms_alone(plans):
+    calib, main = plans("BNCI2014_001", RFL_AGG_EPOCHS="1", RFL_AGG_PARTICIPATION="100")
+    assert set(main.variants(9)) == {"subj_p100_e1", "iid_p100_e1"}
+    calib, main = plans("BNCI2014_001", RFL_AGG_CLIENTS="nope")
+    with pytest.raises(SystemExit, match="subj or iid"):
+        main.variants(9)
+
+
+def test_summary_table_and_figure(tmp_path):
+    from rfl.analysis.aggregation import latex, main, summary
+    from rfl.analysis.results import load_runs
+    rng = __import__("numpy").random.default_rng(0)
+    for rule in ("projavg", "rlavg", "retavg", "pseavg"):
+        for part in ("subject", "iid"):
+            for e in (1, 10):
+                for pct in (25, 100):
+                    for seed in (101, 102, 103):
+                        d = tmp_path / f"fed_spdnet_{rule}_fedper_{part}_p{pct}_e{e}" / "hp" / f"seed{seed}"
+                        d.mkdir(parents=True)
+                        cfg = {"dataset": "Cho2017", "model_type": "spdnet",
+                               "fl_aggregation": rule, "fl_client_partition": part,
+                               "fl_client_fraction": pct / 100, "fl_local_epochs": e,
+                               "fl_local_fc": True, "seed": seed}
+                        diverged = rule == "retavg" and e == 10 and seed == 101
+                        acc = [0.6 + 0.1 * rng.random() for _ in range(4)]
+                        r = {"config": cfg, "diverged": diverged,
+                             "final_metrics": {"per_client_test_acc": acc,
+                                               "global_val_acc": 0.6},
+                             "selection": {"round": 40 * e, "hit_budget": False},
+                             "round_history": {"round": list(range(50))}}
+                        (d / "fl_results.json").write_text(json.dumps(r))
+    s = summary(load_runs(str(tmp_path)), "client_mean_acc")
+    assert len(s) == 4 * 2 * 2 * 2 and set(s["n"]) == {3}
+    row = s[(s["rule"] == "retavg") & (s["local_epochs"] == 10)]
+    assert set(row["n_diverged"]) == {1}
+    assert "$^{1}$" in latex(s) and r"\textbf" in latex(s)
+    assert main([str(tmp_path), "--out", str(tmp_path / "agg")]) == 0
+    assert (tmp_path / "agg.pdf").stat().st_size > 0

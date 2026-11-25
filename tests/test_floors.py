@@ -1,5 +1,6 @@
 """ReEig floors calibrated where each ReEig acts (rfl/experiments/analyze_covariances.py)."""
 import json
+from pathlib import Path
 import types
 
 import numpy as np
@@ -112,7 +113,7 @@ def test_one_percentile_per_block(covs, tmp_path):
     args = _args(tmp_path)
     args.per_block_percentiles = True
     path = write_floors("BNCI2014_001", covs, ["16,8"], args)
-    bn = json.load(open(path))["architectures"]["16,8"]["bn"]
+    bn = json.loads(Path(path).read_text())["architectures"]["16,8"]["bn"]
     assert {"5", "15", "30", "5,15", "30,5"} <= set(bn) and len(bn) == 9
     assert bn["5,30"]["floors"][0] == bn["5"]["floors"][0]
     assert bn["30,5"]["floors"][1] < bn["30"]["floors"][1]
@@ -123,7 +124,7 @@ def test_one_percentile_per_block(covs, tmp_path):
 def test_writing_floors_keeps_the_other_architectures(covs, tmp_path):
     write_floors("BNCI2014_001", covs, ["8"], _args(tmp_path))
     path = write_floors("BNCI2014_001", covs, ["16,8"], _args(tmp_path))
-    assert set(json.load(open(path))["architectures"]) == {"8", "16,8"}
+    assert set(json.loads(Path(path).read_text())["architectures"]) == {"8", "16,8"}
 
 
 @pytest.mark.parametrize("runner", ["fed", "central"])
@@ -137,7 +138,7 @@ def test_runners_read_one_percentile_per_block(covs, tmp_path, runner):
     args = _args(tmp_path)
     args.per_block_percentiles = True
     path = write_floors("BNCI2014_001", covs, ["16,8"], args)
-    want = json.load(open(path))["architectures"]["16,8"]["bn"]["5,30"]["floors"]
+    want = json.loads(Path(path).read_text())["architectures"]["16,8"]["bn"]["5,30"]["floors"]
     base = ["--dataset", "BNCI2014_001", "--hidden-dims", "16,8", "--floors-file", path,
             "--use-batch-norm", "--reeig-percentile", "5"]
     _, a, _ = mod.prepare_args(base + ["--reeig-percentile-2", "30"])
