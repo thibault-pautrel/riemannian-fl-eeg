@@ -4,15 +4,18 @@
 \cmidrule(lr){3-7}
 Head & Normalisation & 5 & 10 & 20 & 40 & all \\
 \midrule
-\multicolumn{7}{l}{\emph{TS+LR}} \\
-Local &  & $\mathbf{48.1} \pm 4.3$ & $\mathbf{57.3} \pm 2.6$ & $\mathbf{62.8} \pm 2.2$ & $\mathbf{68.1} \pm 2.4$ & $\mathbf{74.3} \pm 1.5$ \\
-Pooled re-centred &  & $48.0 \pm 1.9$ & $51.8 \pm 3.3$ & $56.9 \pm 2.6$ & $60.0 \pm 1.8$ & $63.6 \pm 1.4$ \\
-\midrule
 \multicolumn{7}{l}{\emph{SPDNet}} \\
 Local & BN & $45.4 \pm 1.5$ & $54.4 \pm 2.4$ & $60.9 \pm 2.0$ & $\mathbf{67.4} \pm 2.3$ & $\mathbf{73.3} \pm 1.3$ \\
 FedPer & BN (FedBN) & $49.3 \pm 2.4$ & $\mathbf{55.8} \pm 1.8$ & $\mathbf{61.4} \pm 1.8$ & $66.5 \pm 1.7$ & $72.4 \pm 1.7$ \\
 FedPer & shared BN & $37.2 \pm 1.8$ & $44.0 \pm 2.9$ & $48.5 \pm 1.9$ & $50.9 \pm 3.1$ & $54.3 \pm 1.6$ \\
 Shared head & BN (FedBN) & $\mathbf{50.8} \pm 1.6$ & $54.2 \pm 1.8$ & $57.2 \pm 1.8$ & $59.2 \pm 1.6$ & $60.9 \pm 1.5$ \\
 Shared head & shared BN & $37.4 \pm 2.7$ & $39.0 \pm 2.3$ & $40.2 \pm 2.6$ & $41.8 \pm 2.1$ & $42.1 \pm 1.7$ \\
+\midrule
+\multicolumn{7}{l}{\emph{EEGNet}} \\
+Local & BN & $29.7 \pm 1.9$ & $34.3 \pm 1.6$ & $41.5 \pm 2.8$ & $53.3 \pm 2.7$ & $\mathbf{69.1} \pm 2.0$ \\
+FedPer & BN (FedBN) & $31.2 \pm 2.6$ & $35.8 \pm 2.7$ & $42.0 \pm 3.6$ & $52.6 \pm 2.2$ & $64.6 \pm 3.4$ \\
+FedPer & shared BN & $29.4 \pm 3.1$ & $33.8 \pm 3.4$ & $41.2 \pm 3.8$ & $48.2 \pm 3.1$ & $56.0 \pm 2.9$ \\
+Shared head & BN (FedBN) & $33.4 \pm 3.1$ & $\mathbf{42.1} \pm 2.3$ & $\mathbf{49.1} \pm 1.1$ & $\mathbf{54.8} \pm 2.2$ & $60.7 \pm 3.5$ \\
+Shared head & shared BN & $\mathbf{33.4} \pm 3.5$ & $37.2 \pm 3.7$ & $42.7 \pm 2.2$ & $46.5 \pm 1.7$ & $47.1 \pm 2.8$ \\
 \bottomrule
 \end{tabular}

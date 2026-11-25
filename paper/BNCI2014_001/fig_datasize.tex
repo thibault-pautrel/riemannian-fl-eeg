@@ -5,14 +5,12 @@
 \providecolor{C2}{HTML}{2C8B57}
 \providecolor{C3}{HTML}{A02C2C}
 \providecolor{C7}{HTML}{444444}
-\providecolor{rflTslr}{HTML}{52514E}
-\providecolor{rflPooled}{HTML}{A3A29C}
 \providecolor{rflLocal}{HTML}{EB6834}
 \providecolor{rflShared}{HTML}{2A78D6}
 \providecolor{rflFedper}{HTML}{1BAF7A}
 \begin{tikzpicture}
 \begin{groupplot}[
-  group style={group size=1 by 1, horizontal sep=1.6cm, vertical sep=1.9cm},
+  group style={group size=2 by 1, horizontal sep=1.6cm, vertical sep=1.9cm},
   width=0.47\linewidth, height=4.4cm,
   tick label style={font=\scriptsize}, label style={font=\small},
   title style={font=\small},
@@ -42,13 +40,6 @@
   (40,67.4149) += (0,0.725785) -= (0,0.725785)
   (80,73.3092) += (0,0.406921) -= (0,0.406921)
 };
-\addplot+[rflPooled, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
-  (5,47.9922) += (0,0.602156) -= (0,0.602156)
-  (10,51.8495) += (0,1.04798) -= (0,1.04798)
-  (20,56.8822) += (0,0.833362) -= (0,0.833362)
-  (40,60.0414) += (0,0.582463) -= (0,0.582463)
-  (80,63.6353) += (0,0.431954) -= (0,0.431954)
-};
 \addplot+[rflShared, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
   (5,50.7607) += (0,0.520606) -= (0,0.520606)
   (10,54.2128) += (0,0.57148) -= (0,0.57148)
@@ -63,17 +54,6 @@
   (40,41.7678) += (0,0.648644) -= (0,0.648644)
   (80,42.0585) += (0,0.542279) -= (0,0.542279)
 };
-\addplot+[rflTslr, thick, solid, mark=diamond*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
-  (5,48.1357) += (0,1.35448) -= (0,1.35448)
-  (10,57.3265) += (0,0.828348) -= (0,0.828348)
-  (20,62.8048) += (0,0.702262) -= (0,0.702262)
-  (40,68.0747) += (0,0.74776) -= (0,0.74776)
-  (80,74.3064) += (0,0.488234) -= (0,0.488234)
-};
-\addlegendimage{rflTslr, line width=2pt}
-\addlegendentry{TS+LR, local}
-\addlegendimage{rflPooled, line width=2pt}
-\addlegendentry{TS+LR, pooled re-centred}
 \addlegendimage{rflLocal, line width=2pt}
 \addlegendentry{Local}
 \addlegendimage{rflFedper, line width=2pt}
@@ -84,7 +64,43 @@
 \addlegendentry{BN (FedBN)}
 \addlegendimage{black!70, thick, dashed, mark=square*, mark options={solid}}
 \addlegendentry{shared BN}
+\nextgroupplot[title={EEGNet}, xlabel={trials per class and subject}, ylabel={test accuracy (\%)}, ymin=25, ymax=70, xtick={5,10,20,40,80}, xticklabels={5,10,20,40,all}, minor xtick={}, xmode=log, ymode=linear, xmin=3.84615, xmax=104]
+\addplot+[rflFedper, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,31.1706) += (0,0.836228) -= (0,0.836228)
+  (10,35.794) += (0,0.840705) -= (0,0.840705)
+  (20,41.9705) += (0,1.13527) -= (0,1.13527)
+  (40,52.6088) += (0,0.71018) -= (0,0.71018)
+  (80,64.5603) += (0,1.06126) -= (0,1.06126)
+};
+\addplot+[rflFedper, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,29.3993) += (0,0.994596) -= (0,0.994596)
+  (10,33.811) += (0,1.08735) -= (0,1.08735)
+  (20,41.1822) += (0,1.21455) -= (0,1.21455)
+  (40,48.1756) += (0,0.97608) -= (0,0.97608)
+  (80,56.0113) += (0,0.920209) -= (0,0.920209)
+};
+\addplot+[rflLocal, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,29.7035) += (0,0.603549) -= (0,0.603549)
+  (10,34.3248) += (0,0.513847) -= (0,0.513847)
+  (20,41.4619) += (0,0.879545) -= (0,0.879545)
+  (40,53.2823) += (0,0.864905) -= (0,0.864905)
+  (80,69.0921) += (0,0.617414) -= (0,0.617414)
+};
+\addplot+[rflShared, thick, solid, mark=*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,33.4118) += (0,0.978215) -= (0,0.978215)
+  (10,42.1291) += (0,0.735467) -= (0,0.735467)
+  (20,49.0559) += (0,0.344764) -= (0,0.344764)
+  (40,54.8041) += (0,0.688949) -= (0,0.688949)
+  (80,60.709) += (0,1.09957) -= (0,1.09957)
+};
+\addplot+[rflShared, thick, dashed, mark=square*, mark size=1.5pt, mark options={solid}, forget plot, error bars/.cd, y dir=both, y explicit] coordinates {
+  (5,33.4353) += (0,1.10738) -= (0,1.10738)
+  (10,37.1619) += (0,1.17088) -= (0,1.17088)
+  (20,42.7201) += (0,0.710827) -= (0,0.710827)
+  (40,46.5394) += (0,0.53569) -= (0,0.53569)
+  (80,47.1229) += (0,0.899306) -= (0,0.899306)
+};
 \end{groupplot}
-\path (group c1r1.outer south) -- (group c1r1.outer south)
+\path (group c1r1.outer south) -- (group c2r1.outer south)
   node[midway, anchor=north, yshift=-3pt] {\pgfplotslegendfromname{datasizelegend}};
 \end{tikzpicture}
