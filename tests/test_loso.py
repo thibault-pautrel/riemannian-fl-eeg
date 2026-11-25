@@ -333,7 +333,9 @@ def test_analysis_tables_figure_and_tests(fake_moabb, tmp_path, monkeypatch):
     assert set(s2[s2.source == "shared"]["count"]) == {1}
     assert set(s2[s2.source == "central"]["count"]) == {2}
     out = tmp_path / "paper"
-    paper.main(["BNCI2014_001", "--results", str(root), "--out", str(out)])
+    with pytest.raises(SystemExit):              # the inter-subject study is opt-in
+        paper.main(["BNCI2014_001", "--results", str(root), "--out", str(out)])
+    paper.main(["BNCI2014_001", "--results", str(root), "--out", str(out), "--loso"])
     for name in ("tab_loso.tex", "fig_loso.tex", "tab_loso_tests.tex", "loso_tests.csv",
                  "tab_loso_subjects_spdnet_N0.tex", "tab_loso_subjects_spdnet_N5.tex",
                  "results.tex", "clients.csv"):

@@ -84,3 +84,5 @@ def test_paper_writes_every_table_and_figure(tmp_path):
     ds = (out / "tab_datasize.tex").read_text()
     assert "\\emph{SPDNet}" in ds and "TS+LR" not in ds and "& all \\\\" in ds
     assert "xticklabels={5,10,all}" in (out / "fig_datasize.tex").read_text()
+    rounds = (out / "fig_bn_rounds.tex").read_text()
+    assert "\\addlegendentry{FedPer}" in rounds and "\\addlegendentry{Local}" not in rounds

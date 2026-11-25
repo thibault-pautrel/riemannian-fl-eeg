@@ -22,7 +22,7 @@
 \end{table}
 \begin{figure}[htbp]\centering
 \input{fig_bn_rounds}
-\caption{Batch-norm study, subject clients: client mean test accuracy against the communication round, mean over the seeds. A seed that stopped keeps its last value.}
+\caption{Batch-norm study, subject clients, federated arms: client mean test accuracy against the communication round, mean over the seeds. A seed that stopped keeps its last value.}
 \end{figure}
 \clearpage
 \section{Data quantity}
@@ -34,11 +34,5 @@
 \input{fig_datasize}
 \caption{Data quantity: client mean test accuracy against $N$, mean and standard error over the seeds.}
 \end{figure}
-\clearpage
-\section{Inter-subject}
-\begin{table}[htbp]\centering
-\caption{Inter-subject study: mean test accuracy of the target subjects (\%), mean $\pm$ std over the seeds, against the labeled trials per class of the target. Stats: batch-norm statistics of the target (none: those of the sources; pool: its unlabeled calibration trials; labeled: its $N$ labeled trials), re-centring for TS+LR. Within: the arm in the batch-norm study. Best mean of each column and block in bold.}
-\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{\input{tab_loso}}
-\end{table}
 \clearpage
 \end{document}

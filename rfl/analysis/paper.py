@@ -1,10 +1,10 @@
 """LaTeX tables and pgfplots figures of the batch-norm and data-quantity studies.
 
-    python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001
+    python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001 [--loso]
 
 Reads the final runs of one dataset under $RFL_RESULTS (mi_<dataset>_bn, _bn_eegnet,
-_datasize, _datasize_eegnet, _loso, _loso_eegnet, _loso_tslr) and writes,
-for the studies that have runs:
+_datasize, _datasize_eegnet, and with --loso _loso, _loso_eegnet, _loso_tslr) and
+writes, for the studies that have runs:
 
     tab_bn.tex                 batch norm: client mean test accuracy of every arm
     tab_bn_clients_<model>.tex batch norm: test accuracy of each subject
@@ -12,7 +12,7 @@ for the studies that have runs:
     tab_datasize.tex           data quantity: accuracy against N (scenario U)
     fig_datasize.tex           data quantity: the same as a figure, one panel per network
     tab_loso*.tex, fig_loso.tex, loso_tests.csv
-                               inter-subject study (rfl/analysis/loso.py)
+                               with --loso: inter-subject study (rfl/analysis/loso.py)
     clients.csv                every final run: test accuracy of each client
     results.tex, results.pdf   one document with all of them (pdf when pdflatex is found)
 
@@ -230,10 +230,10 @@ def _points(length: int, n: int = 200) -> np.ndarray:
 def bn_rounds(df: pd.DataFrame, path: Path) -> bool:
     """Client mean test accuracy against the round, one panel per network.
 
-    A seed that stopped early keeps its last value up to the longest seed of its arm, so
+    Federated arms only: the local arm has no communication. A seed that stopped early keeps its last value up to the longest seed of its arm, so
     each curve runs until the last seed stops and ends on its plateau.
     """
-    fed = df[(df.kind == "federated") & (df.clients == "subject")]
+    fed = df[(df.kind == "federated") & (df.clients == "subject") & (df.scope != "local")]
     panels, used = [], set()
     for m in [m for m in MODELS if m in set(fed.model)]:
         series, top = [], 0
@@ -269,7 +269,7 @@ def bn_rounds(df: pd.DataFrame, path: Path) -> bool:
     if not panels:
         return False
     legend = [(HEADS[h], f"{HEAD_COLOUR[h]}, line width=2pt")
-              for h in ("local", "fedper", "shared") if any(u[0] == h for u in used)]
+              for h in ("fedper", "shared") if any(u[0] == h for u in used)]
     legend += [(NORMS[n], f"black!70, thick, {NORM_LINE[n][0]}")
                for n in NORMS if any(u[1] == n for u in used)]
     grid_figure(path, panels, legend, cols=len(panels), legend_name="bnroundslegend",
@@ -381,9 +381,9 @@ CAPTIONS = {
                              "each subject (\\%). Best mean of each row in bold.",
     "tab_bn_clients_eegnet": "Batch-norm study, EEGNet, subject clients: test accuracy of "
                              "each subject (\\%). Best mean of each row in bold.",
-    "fig_bn_rounds": "Batch-norm study, subject clients: client mean test accuracy against "
-                     "the communication round, mean over the seeds. A seed that stopped "
-                     "keeps its last value.",
+    "fig_bn_rounds": "Batch-norm study, subject clients, federated arms: client mean test "
+                     "accuracy against the communication round, mean over the seeds. A "
+                     "seed that stopped keeps its last value.",
     "tab_datasize": "Data quantity (every subject has $N$ trials per class): client mean "
                     "test accuracy (\\%). Best mean of each column and block in bold.",
     "fig_datasize": "Data quantity: client mean test accuracy against $N$, mean and "
@@ -446,6 +446,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p.add_argument("--out", default=None, help="output folder (default: paper/<dataset>)")
     p.add_argument("--results", default=os.environ.get("RFL_RESULTS", "results"),
                    help="results folder (default: $RFL_RESULTS)")
+    p.add_argument("--loso", action="store_true", help="add the inter-subject study")
     a = p.parse_args(argv)
     root, out = Path(a.results), Path(a.out or f"paper/{a.dataset}")
     out.mkdir(parents=True, exist_ok=True)
@@ -471,11 +472,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         datasize_figure(t, out / "fig_datasize.tex")
         details.append(client_details(ds).assign(study="datasize"))
 
-    from rfl.analysis import loso as LO
-    rec = LO.write_all(root, a.dataset, out)
-    if rec is not None:
-        details.append(rec.rename(columns={"acc": "test_acc"})
-                       .assign(study="loso", subjects=rec.subject.astype(str)))
+    if a.loso:
+        from rfl.analysis import loso as LO
+        rec = LO.write_all(root, a.dataset, out)
+        if rec is not None:
+            details.append(rec.rename(columns={"acc": "test_acc"})
+                           .assign(study="loso", subjects=rec.subject.astype(str)))
 
     if not details:
         raise SystemExit(f"no final run of {a.dataset} under {root}")
