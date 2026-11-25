@@ -3,14 +3,16 @@
     python -m rfl.analysis.paper BNCI2014_001 --out paper/BNCI2014_001 [--loso]
 
 Reads the final runs of one dataset under $RFL_RESULTS (mi_<dataset>_bn, _bn_eegnet,
-_datasize, _datasize_eegnet, and with --loso _loso, _loso_eegnet, _loso_tslr) and
-writes, for the studies that have runs:
+_datasize, _datasize_eegnet, _datasize_iid, _datasize_iid_eegnet, and with --loso _loso,
+_loso_eegnet, _loso_tslr) and writes, for the studies that have runs:
 
     tab_bn.tex                 batch norm: client mean test accuracy of every arm
     tab_bn_clients_<model>.tex batch norm: test accuracy of each subject
     fig_bn_rounds.tex          batch norm: client mean test accuracy against the round
-    tab_datasize.tex           data quantity: accuracy against N (scenario U)
+    tab_datasize.tex           data quantity: accuracy against N (scenario U), subject
+                               clients, then IID clients (the control)
     fig_datasize.tex           data quantity: the same as a figure, one panel per network
+                               and client partition
     tab_loso*.tex, fig_loso.tex, loso_tests.csv
                                with --loso: inter-subject study (rfl/analysis/loso.py)
     clients.csv                every final run: test accuracy of each client
@@ -304,8 +306,27 @@ DS_HEADS = {"local": "Local", "fedper": "FedPer", "shared": "Shared head"}
 NORM_ORDER = ["nobn", "bn", "shared"]
 
 
+PARTITIONS = {"subject": "", "iid": ", IID clients"}
+
+
+def _blocks(t: pd.DataFrame, keep_empty: bool = False):
+    """(title, rows) of each network and client partition, subject clients first.
+
+    With keep_empty, a partition with runs yields every network of `t`, (title, None)
+    when the partition has none of its runs: the grid of the figure stays aligned.
+    """
+    nets = [m for m in MODELS if m in set(t.model)]
+    for c, suffix in PARTITIONS.items():
+        if not (t.clients == c).any():
+            continue
+        for m in nets:
+            b = t[(t.model == m) & (t.clients == c)]
+            if not b.empty or keep_empty:
+                yield MODELS[m] + suffix, (b if not b.empty else None)
+
+
 def datasize_table(t: pd.DataFrame) -> List[str]:
-    """Rows: curves, one block per network. Columns: N, then all."""
+    """Rows: curves, one block per network and client partition. Columns: N, then all."""
     ns = sorted(t.N.unique())
     names = ["all" if not np.isfinite(n) else f"{n:g}" for n in ns]
     n_max = int(t["count"].max())
@@ -313,10 +334,7 @@ def datasize_table(t: pd.DataFrame) -> List[str]:
              " & & \\multicolumn{" + str(len(ns)) + "}{c}{trials per class and subject} \\\\",
              f"\\cmidrule(lr){{3-{2 + len(ns)}}}",
              "Head & Normalisation & " + " & ".join(names) + " \\\\"]
-    for model, title in MODELS.items():
-        b = t[t.model == model]
-        if b.empty:
-            continue
+    for title, b in _blocks(t):
         lines += ["\\midrule", f"\\multicolumn{{{2 + len(ns)}}}{{l}}{{\\emph{{{title}}}}} \\\\"]
         best = b.groupby("N")["mean"].max()
         for (h, nk), g in sorted(b.groupby(["head", "normkey"]),
@@ -332,18 +350,21 @@ def datasize_table(t: pd.DataFrame) -> List[str]:
 
 
 def datasize_figure(t: pd.DataFrame, path: Path) -> bool:
-    """Accuracy against N, one panel per network."""
-    nets = [m for m in MODELS if m in set(t.model)]
-    if not nets:
+    """Accuracy against N, one panel per network (columns) and client partition (rows)."""
+    blocks = list(_blocks(t, keep_empty=True))
+    if not blocks:
         return False
+    nets = [m for m in MODELS if m in set(t.model)]
     ns = sorted(n for n in t.N.unique() if np.isfinite(n))
     has_all = bool((~np.isfinite(t.N)).any())
     x_all = 2 * max(ns)
     ticks = ns + ([x_all] if has_all else [])
     labels = [f"{n:g}" for n in ns] + (["all"] if has_all else [])
     panels, used = [], set()
-    for m in nets:
-        sub = t[t.model == m]
+    for title, sub in blocks:
+        if sub is None:
+            panels.append(None)
+            continue
         series = []
         for (h, nk), g in sub.groupby(["head", "normkey"]):
             g = g.sort_values("N")
@@ -354,7 +375,7 @@ def datasize_figure(t: pd.DataFrame, path: Path) -> bool:
                            "y": g["mean"].tolist(), "err_lo": g["se"].tolist(),
                            "err_hi": g["se"].tolist()})
             used.add((h, nk))
-        panels.append({"title": MODELS[m], "xlabel": "trials per class and subject",
+        panels.append({"title": title, "xlabel": "trials per class and subject",
                        "ylabel": "test accuracy (\\%)", "xticks": ticks,
                        "xticklabels": labels, "xmin": min(ns) / 1.3, "xmax": x_all * 1.3,
                        "ylog": False,
@@ -366,7 +387,7 @@ def datasize_figure(t: pd.DataFrame, path: Path) -> bool:
     legend += [(NORMS[n], f"black!70, thick, {NORM_LINE[n][0]}, mark={NORM_LINE[n][1]}, "
                           "mark options={solid}")
                for n in NORMS if any(u[1] == n for u in used)]
-    grid_figure(path, panels, legend, cols=len(panels), legend_name="datasizelegend",
+    grid_figure(path, panels, legend, cols=len(nets), legend_name="datasizelegend",
                 colours=COLOURS, legend_columns=4,
                 comment="Client mean test accuracy against the trials per class and "
                         "subject (scenario U), mean and standard error over the seeds.")
@@ -385,9 +406,11 @@ CAPTIONS = {
                      "accuracy against the communication round, mean over the seeds. A "
                      "seed that stopped keeps its last value.",
     "tab_datasize": "Data quantity (every subject has $N$ trials per class): client mean "
-                    "test accuracy (\\%). Best mean of each column and block in bold.",
+                    "test accuracy (\\%). IID clients hold the same trials, dealt at "
+                    "random. Best mean of each column and block in bold.",
     "fig_datasize": "Data quantity: client mean test accuracy against $N$, mean and "
-                    "standard error over the seeds.",
+                    "standard error over the seeds. IID clients hold the same trials, "
+                    "dealt at random.",
 }
 
 
@@ -465,7 +488,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 _write(out / f"tab_bn_clients_{m}.tex", lines)
         bn_rounds(bn, out / "fig_bn_rounds.tex")
 
-    ds = final_runs(root, a.dataset, ("datasize", "datasize_eegnet"))
+    ds = final_runs(root, a.dataset, ("datasize", "datasize_eegnet", "datasize_iid",
+                                      "datasize_iid_eegnet"))
     if ds is not None:
         t = _datasize_rows(ds)
         _write(out / "tab_datasize.tex", datasize_table(t))

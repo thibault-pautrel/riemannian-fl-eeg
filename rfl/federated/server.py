@@ -777,7 +777,9 @@ def create_fl_clients_and_targets(dataset_name: str, all_subjects: List[int],
     (val_size, test_size, data_split_seed) of the config. Each trial then goes to the
     client that owns its subject, or, with config.fl_client_partition == 'iid', to a
     client drawn by `iid_partition` (the same number of clients). The union of the
-    client splits is therefore the centralized split in both cases.
+    client splits is therefore the centralized split in both cases. With
+    config.train_trials_per_class, IID clients receive the trials that the subject
+    clients keep (the same draw, rfl/data/reduction.py:reduce_indices).
 
     With config.target_subjects (rfl/experiments/loso.py), the split is the same. The
     targets are then set apart: they become no client (target_role 'adapt') and their
@@ -797,7 +799,8 @@ def create_fl_clients_and_targets(dataset_name: str, all_subjects: List[int],
         'local').
     """
     from rfl.data.data_utils import resolve_resample, split_indices
-    from rfl.data.reduction import reduce_pool, reduced_positions, subject_rng
+    from rfl.data.reduction import (reduce_indices, reduce_pool, reduced_positions,
+                                    subject_rng)
     from rfl.experiments.loso import members, split_targets
     from rfl.federated.fl_config import create_client_subject_mapping
 
@@ -852,19 +855,18 @@ def create_fl_clients_and_targets(dataset_name: str, all_subjects: List[int],
                             f"test={len(t.y_test)} labeled per N: "
                             f"{ {n: len(p) for n, p in t.labeled.items()} }")
     use_local_fc = bool(config.fl_local_fc)
-    if iid:
-        k = len(client_subjects)
-        parts = [iid_partition(idx, y_all, k, split_seed, tag)
-                 for tag, idx in enumerate((train_idx, val_idx, test_idx))]
-        subject_of = meta['subject'].to_numpy()
-
     # Data quantity (rfl/data/reduction.py): fewer calibration trials per subject.
     n_cal = config.train_trials_per_class
-    if n_cal and iid:
-        raise ValueError("--train-trials-per-class reduces subjects: use it with "
-                         "--client-partition subject")
+    if iid:
+        k = len(client_subjects)
+        subject_of = meta['subject'].to_numpy()
+        if n_cal:
+            train_idx, val_idx, _ = reduce_indices(train_idx, val_idx, y_all, subject_of,
+                                                   all_subjects, config)
+        parts = [iid_partition(idx, y_all, k, split_seed, tag)
+                 for tag, idx in enumerate((train_idx, val_idx, test_idx))]
     reduced_pos = (reduced_positions(len(all_subjects), int(config.reduced_subjects),
-                                     int(config.seed)) if n_cal else set())
+                                     int(config.seed)) if n_cal and not iid else set())
     position = {int(s): i for i, s in enumerate(all_subjects)}
 
     clients: List[FLClient] = []
@@ -873,6 +875,7 @@ def create_fl_clients_and_targets(dataset_name: str, all_subjects: List[int],
         if iid:
             tr, va, te = (sorted(p[client_id]) for p in parts)
             subs = sorted({int(s) for s in subject_of[tr + va + te]})
+            reduced = bool(n_cal)
         else:
             tr, va, te = [], [], []
             for sub in subs:

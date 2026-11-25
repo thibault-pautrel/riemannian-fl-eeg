@@ -53,8 +53,9 @@ def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]
 
     Each panel is a dict with `title`, `xlabel`, `ylabel`, `xticks`, `ymin`, `ymax` and
     `series`, and optionally `xticklabels`, `xmin`, `xmax`, `xlog` and `ylog` (default
-    True). A series has `style` (a key of STYLES or pgfplots options), `x`, `y` and
-    optionally `err_lo`, `err_hi` (error bars). `legend` lists (label, style) pairs.
+    True). A panel None leaves its place empty. A series has `style` (a key of STYLES or
+    pgfplots options), `x`, `y` and optionally `err_lo`, `err_hi` (error bars). `legend`
+    lists (label, style) pairs, drawn under the whole figure.
     `colours` adds named colours, {name: RRGGBB}.
     """
     rows = (len(panels) + cols - 1) // cols
@@ -76,7 +77,11 @@ def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]
         "  legend cell align=left,",
         "]",
     ]
+    first = next(i for i, pan in enumerate(panels) if pan is not None)
     for i, pan in enumerate(panels):
+        if pan is None:
+            lines.append("\\nextgroupplot[group/empty plot]")
+            continue
         opts = [f"title={{{pan['title']}}}",
                 f"xlabel={{{pan['xlabel']}}}", f"ylabel={{{pan['ylabel']}}}",
                 f"ymin={_num(pan['ymin'])}", f"ymax={_num(pan['ymax'])}",
@@ -88,18 +93,17 @@ def grid_figure(path: Path, panels: List[Dict], legend: Sequence[Tuple[str, str]
         for key in ("xmin", "xmax"):
             if key in pan:
                 opts.append(f"{key}={_num(pan[key])}")
-        if i == 0:
+        if i == first:
             opts.append(f"legend to name={legend_name}")
         lines.append("\\nextgroupplot[" + ", ".join(opts) + "]")
         for s in pan["series"]:
             lines += _series(s)
-        if i == 0:
+        if i == first:
             for label, style in legend:
                 lines.append(f"\\addlegendimage{{{STYLES.get(style, style)}}}")
                 lines.append(f"\\addlegendentry{{{label}}}")
     lines += ["\\end{groupplot}",
-              f"\\path (group c1r{rows}.outer south) -- (group c{cols}r{rows}.outer south)",
-              "  node[midway, anchor=north, yshift=-3pt] "
+              "\\node[anchor=north, yshift=-3pt] at (current bounding box.south) "
               f"{{\\pgfplotslegendfromname{{{legend_name}}}}};",
               "\\end{tikzpicture}", ""]
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -776,14 +776,17 @@ def datasize_plans(bn_plans):
 
     import rfl.experiments.plans.mi_datasize as spd
     import rfl.experiments.plans.mi_datasize_eegnet as eeg
+    import rfl.experiments.plans.mi_datasize_iid as iid
+    import rfl.experiments.plans.mi_datasize_iid_eegnet as iid_eeg
     import rfl.experiments.plans.mi_datasize_tslr as ts
+    mods = (spd, eeg, iid, iid_eeg, ts)
 
     def load(dataset):
         bn_plans(dataset)
-        for m in (spd, eeg, ts):
+        for m in mods:
             importlib.reload(m)
     yield load
-    for m in (spd, eeg, ts):
+    for m in mods:
         importlib.reload(m)
 
 
@@ -831,6 +834,12 @@ def test_data_quantity_plans_tune_every_arm_on_the_reduced_clients(root, datasiz
     assert all("sgd" in j.args and "plateau" in j.args for j in eeg)
     ts = G.plan_jobs("mi_datasize_tslr", "final", check=True)
     assert len(ts) == 5 * 2 * 10 and {j.entry for j in ts} == {"tslr"}
+    # IID clients: the same arms and grids, with the trials dealt at random.
+    iid = G.plan_jobs("mi_datasize_iid", "sweep1", check=True)
+    assert {j.arm.replace("_iid_", "_") for j in iid} == arms and len(iid) == len(s1)
+    assert all(_parse(j).client_partition == "iid" for j in iid)
+    iid_eeg = G.plan_jobs("mi_datasize_iid_eegnet", "sweep1", check=True)
+    assert {j.arm.replace("_iid_", "_") for j in iid_eeg} == {j.arm for j in eeg}
 
 
 def test_log_filter_drops_a_tensor_printed_after_a_progress_bar():

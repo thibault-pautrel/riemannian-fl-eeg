@@ -1,5 +1,7 @@
 """rfl/analysis/paper.py on a small fake results folder."""
 import json
+import shutil
+import subprocess
 
 import numpy as np
 
@@ -56,11 +58,16 @@ def _fake(root, rng):
                          list(rng.uniform(0.4, 0.8, 3)), central=True)
             for n in (5, 10, None):
                 tag = f"U{n}" if n else "full"
+                eeg = "_eegnet" if model == "eegnet" else ""
                 for norm in ("nobn", "bn"):
-                    _run(root, f"mi_DS_datasize{'_eegnet' if model == 'eegnet' else ''}",
-                         f"fed_{model}_fedper_{norm}_{tag}", seed,
-                         {**net(model, norm), "fl_local_fc": True,
-                          "train_trials_per_class": n}, list(rng.uniform(0.3, 0.7, 3)))
+                    _run(root, f"mi_DS_datasize{eeg}", f"fed_{model}_fedper_{norm}_{tag}",
+                         seed, {**net(model, norm), "fl_local_fc": True,
+                                "train_trials_per_class": n}, list(rng.uniform(0.3, 0.7, 3)))
+                if model == "spdnet":           # no EEGNet IID run: an empty panel
+                    _run(root, "mi_DS_datasize_iid", f"fed_spdnet_fedper_iid_bn_{tag}",
+                         seed, {**net(model, "bn"), "fl_local_fc": True,
+                                "fl_client_partition": "iid", "train_trials_per_class": n},
+                         list(rng.uniform(0.3, 0.7, 3)))
 
 
 def test_paper_writes_every_table_and_figure(tmp_path):
@@ -84,5 +91,11 @@ def test_paper_writes_every_table_and_figure(tmp_path):
     ds = (out / "tab_datasize.tex").read_text()
     assert "\\emph{SPDNet}" in ds and "TS+LR" not in ds and "& all \\\\" in ds
     assert "xticklabels={5,10,all}" in (out / "fig_datasize.tex").read_text()
+    fig = (out / "fig_datasize.tex").read_text()
+    assert "\\emph{SPDNet, IID clients}" in ds and "EEGNet, IID" not in ds
+    assert "title={SPDNet, IID clients}" in fig and "group/empty plot" in fig
+    if shutil.which("pdflatex") and shutil.which("kpsewhich") and subprocess.run(
+            ["kpsewhich", "pgfplots.sty"], capture_output=True).stdout:
+        assert (out / "results.pdf").exists()          # the figures compile
     rounds = (out / "fig_bn_rounds.tex").read_text()
     assert "\\addlegendentry{FedPer}" in rounds and "\\addlegendentry{Local}" not in rounds

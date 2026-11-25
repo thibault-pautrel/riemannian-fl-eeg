@@ -10,6 +10,7 @@ import torch
 
 from rfl.data import reduction as R
 from rfl.experiments import datasize as DS
+from test_loso import fake_moabb  # noqa: F401  (fixture)
 
 
 # ----------------------------------------------------------------- reduction
@@ -83,10 +84,41 @@ def test_config_validation():
         R.reduced_positions(3, 4, 0)                          # more than the subjects
 
 
-def test_iid_partition_refuses_reduction():
+def test_iid_partition_refuses_the_heterogeneous_scenario():
     from rfl.federated.fl_config import FLConfig
+    FLConfig(train_trials_per_class=5, fl_client_partition="iid")
     with pytest.raises(ValueError, match="subject"):
-        FLConfig(train_trials_per_class=5, fl_client_partition="iid")
+        FLConfig(train_trials_per_class=5, reduced_subjects=2, fl_client_partition="iid")
+
+
+def test_iid_clients_hold_the_trials_of_the_reduced_subjects(fake_moabb, monkeypatch):
+    """The trials kept by the subject clients, dealt at random by class to IID clients."""
+    import rfl.federated.server as sv
+    from rfl.federated.fl_config import FLConfig
+    X = fake_moabb[0]
+    row = {x.tobytes(): i for i, x in enumerate(X)}
+
+    class Stub:                                    # records the trials of each client
+        def __init__(self, **kw):
+            self.subjects = kw["subjects"]
+
+        def prepare_data_from_splits(self, *splits, verbose=False):
+            self.splits = [[row[x.tobytes()] for x in splits[j]] for j in (0, 2, 4)]
+    monkeypatch.setattr(sv, "_client_class", lambda config: Stub)
+
+    def trials(partition, order):
+        cfg = FLConfig(model_type="spdnet", fl_client_partition=partition, seed=3,
+                       train_trials_per_class=5, calibration_order=order)
+        clients, _ = sv.create_fl_clients_and_targets(
+            "BNCI2014_001", [1, 2, 3, 4], 1, cfg, torch.device("cpu"), verbose=False)
+        return clients, [sorted(i for c in clients for i in c.splits[j]) for j in range(3)]
+    for order in ("random", "chronological"):
+        _, subject = trials("subject", order)
+        clients, iid = trials("iid", order)
+        assert iid == subject                       # train, validation and test
+        assert all(c.reduced for c in clients)
+        assert {len(c.splits[0]) for c in clients} == {16}     # 4 per class and client
+        assert all(len(c.subjects) > 1 for c in clients)       # every client mixes subjects
 
 
 def test_reduction_options_need_n():

@@ -110,7 +110,7 @@ def reduce_arrays(split: Dict[str, np.ndarray], n_per_class: int, val_fraction: 
 
 def reduce_indices(train_idx, val_idx, y_all: np.ndarray, subject_of: np.ndarray,
                    subjects: Sequence[int], config) -> Tuple[list, list, List[int]]:
-    """Reduce the subjects of a pooled split (the centralised runs).
+    """Reduce the subjects of a pooled split (centralised runs, IID federated clients).
 
     The same draw as the federated runs (rfl/federated/server.py): subject s at position
     p of `subjects` is reduced when p is drawn, with the generator of p.

@@ -223,8 +223,9 @@ class FLConfig(ExperimentConfig):
         if self.fl_client_partition not in ('subject', 'iid'):
             raise ValueError("fl_client_partition must be 'subject' or 'iid', got "
                              f"{self.fl_client_partition!r}")
-        if self.train_trials_per_class and self.fl_client_partition == 'iid':
-            raise ValueError("--train-trials-per-class reduces subjects: use it with "
+        if (self.train_trials_per_class and self.reduced_subjects
+                and self.fl_client_partition == 'iid'):
+            raise ValueError("--reduced-subjects reduces some subjects only: use it with "
                              "--client-partition subject")
         if not 0.0 < self.fl_client_fraction <= 1.0:
             raise ValueError("fl_client_fraction must be in (0, 1]")

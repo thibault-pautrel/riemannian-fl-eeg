@@ -1,8 +1,10 @@
 """Accuracy against the number of calibration trials: table and figure.
 
 Reads the final runs of the data-quantity plans (mi_datasize, mi_datasize_eegnet,
-mi_datasize_tslr) and plots, for each scenario, the test accuracy of
-every arm against N (calibration trials per class and subject, log scale):
+mi_datasize_tslr, and the IID controls mi_datasize_iid, mi_datasize_iid_eegnet, which
+the glob of the example below includes) and plots, for each scenario, the test accuracy
+of every arm against N (calibration trials per class and subject, log scale). The
+curves of IID clients have open markers:
 
     U   every subject has N trials: mean accuracy over the subjects
     H   a few subjects have N trials, the others all theirs: mean accuracy of the
@@ -87,21 +89,23 @@ def table(df: pd.DataFrame) -> pd.DataFrame:
         kind = p["scenario"][0] if p["scenario"] != "full" else "full"
         n = math.inf if p["scenario"] == "full" else int(p["scenario"][1:])
         scope = str(r["scope"]).replace("+refit", "")
+        clients = r["clients"] if isinstance(r["clients"], str) else "subject"
+        tag = " · IID clients" if clients == "iid" else ""
         base = {"scenario": kind, "N": n, "seed": r["seed"], "model": r["model"],
-                "norm": norm_name(r["model"], scope, p["norm"])}
+                "clients": clients, "norm": norm_name(r["model"], scope, p["norm"])}
         rows.append({**base, "family": family(r["model"], scope),
-                     "curve": label(r["model"], scope, p["norm"]),
+                     "curve": label(r["model"], scope, p["norm"]) + tag,
                      "acc": r["reduced_test_acc"]})
         if str(r["scope"]).endswith("+refit") and not pd.isna(r["reduced_refit_test_acc"]):
             rows.append({**base, "family": family(r["model"], "shared+refit"),
-                         "curve": label(r["model"], "shared+refit", p["norm"]),
+                         "curve": label(r["model"], "shared+refit", p["norm"]) + tag,
                          "acc": r["reduced_refit_test_acc"]})
     t = pd.DataFrame(rows)
     # 'full' belongs to both scenarios (every subject has all its trials).
     full = t[t.scenario == "full"]
     t = pd.concat([t[t.scenario != "full"], full.assign(scenario="U"),
                    full.assign(scenario="H")])
-    g = t.groupby(["scenario", "model", "family", "norm", "curve", "N"])["acc"]
+    g = t.groupby(["scenario", "model", "clients", "family", "norm", "curve", "N"])["acc"]
     out = g.agg(["mean", "count", "std"]).reset_index()
     out["se"] = out["std"] / np.sqrt(out["count"])
     out[["mean", "std", "se"]] *= 100
@@ -139,12 +143,13 @@ def plot(tab: pd.DataFrame, path: str, title: str = "") -> None:
     for ax, scen, ylab in ((axes[0], "U", "test accuracy, all subjects (%)"),
                            (axes[1], "H", "test accuracy, subjects with N trials (%)")):
         sub = tab[tab.scenario == scen]
-        for (fam, norm), d in sub.groupby(["family", "norm"]):
+        for (fam, norm, clients), d in sub.groupby(["family", "norm", "clients"]):
             d = d.sort_values("N")
             x = [x_full if not np.isfinite(n) else n for n in d.N]
             ls, mk = NORM_STYLES.get(norm, ("-", "o"))
             ax.errorbar(x, d["mean"], yerr=d["se"], color=color[fam], marker=mk, ls=ls,
-                        lw=1.8, ms=6, capsize=2)
+                        lw=1.8, ms=6, capsize=2,
+                        mfc="white" if clients == "iid" else color[fam])
         ax.set_xscale("log")
         ax.xaxis.set_minor_locator(NullLocator())
         has_full = bool((~np.isfinite(tab.N)).any())
@@ -164,6 +169,9 @@ def plot(tab: pd.DataFrame, path: str, title: str = "") -> None:
     handles += [Line2D([], [], color="#52514e", ls=NORM_STYLES[n][0],
                        marker=NORM_STYLES[n][1], lw=1.8) for n in norms]
     labels += [{"FedBN": "BN on each client (FedBN, local)"}.get(n, n) for n in norms]
+    if (tab.clients == "iid").any():
+        handles.append(Line2D([], [], color="#52514e", marker="o", mfc="white", ls=""))
+        labels.append("IID clients (open markers)")
     fig.legend(handles, labels, loc="lower center", ncol=3, frameon=False, fontsize=8.5,
                bbox_to_anchor=(0.5, 0.0))
     nrow = math.ceil(len(labels) / 3)
@@ -174,26 +182,29 @@ def plot(tab: pd.DataFrame, path: str, title: str = "") -> None:
 
 
 def paired_gain(df: pd.DataFrame) -> pd.DataFrame:
-    """Per scenario and N: each federated curve (re-fitted heads included) minus the best
-    local curve of the scenario (TS+LR or a network, chosen on its mean), paired by seed."""
+    """Per scenario, client partition and N: each federated curve (re-fitted heads
+    included) minus the best local curve of the same scenario and partition, chosen on
+    its mean, paired by seed. With subject clients the local curves are TS+LR and the
+    networks. With IID clients they are the networks only, since TS+LR has no IID run."""
     t = []
     for _, r in df.iterrows():
         p = parse_arm(r["arm"])
         if p["scenario"] in (None, "full"):
             continue
         scope = str(r["scope"]).replace("+refit", "")
-        t.append({"scenario": p["scenario"], "seed": r["seed"],
-                  "curve": label(r["model"], scope, p["norm"]),
+        clients = r["clients"] if isinstance(r["clients"], str) else "subject"
+        tag = " · IID clients" if clients == "iid" else ""
+        base = {"scenario": p["scenario"], "clients": clients, "seed": r["seed"]}
+        t.append({**base, "curve": label(r["model"], scope, p["norm"]) + tag,
                   "acc": 100 * r["reduced_test_acc"]})
         if str(r["scope"]).endswith("+refit") and not pd.isna(r["reduced_refit_test_acc"]):
-            t.append({"scenario": p["scenario"], "seed": r["seed"],
-                      "curve": label(r["model"], "shared+refit", p["norm"]),
+            t.append({**base, "curve": label(r["model"], "shared+refit", p["norm"]) + tag,
                       "acc": 100 * r["reduced_refit_test_acc"]})
     t = pd.DataFrame(t)
     if t.empty:
         return t
     out = []
-    for scen, d in t.groupby("scenario"):
+    for (scen, clients), d in t.groupby(["scenario", "clients"]):
         piv = d.pivot_table(index="seed", columns="curve", values="acc")
         local = [c for c in piv.columns if c.startswith("Local")]
         if not local:
@@ -204,7 +215,8 @@ def paired_gain(df: pd.DataFrame) -> pd.DataFrame:
                 diff = (piv[c] - piv[best_local]).dropna()
                 if len(diff) >= 2:
                     se = diff.std(ddof=1) / math.sqrt(len(diff))
-                    out.append({"scenario": scen, "curve": c, "vs": best_local,
+                    out.append({"scenario": scen, "clients": clients, "curve": c,
+                                "vs": best_local,
                                 "gain": diff.mean(), "ci95": 1.96 * se, "n": len(diff)})
     return pd.DataFrame(out)
 

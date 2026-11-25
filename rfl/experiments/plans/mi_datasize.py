@@ -67,11 +67,12 @@ EXTEND = extend_rules({**_EXTEND,
 SELECTION = SELECTION
 
 
-def study() -> Protocol:
+def study(partition: tuple = (), prefix: str = "", name: str = NAME) -> Protocol:
+    """The arms of the docstring. `partition` and `prefix` serve mi_datasize_iid."""
     from rfl.experiments.plans.mi_spdnet_bn import calibrated
-    bn = tuple(calibrated()) + ("--bn-recalibrate",)
-    norms = {"bn": (bn, None),
-             "bnshared": (bn + ("--no-fedbn",), FEDERATED)}
+    bn = tuple(partition) + tuple(calibrated()) + ("--bn-recalibrate",)
+    norms = {f"{prefix}bn": (bn, None),
+             f"{prefix}bnshared": (bn + ("--no-fedbn",), FEDERATED)}
     return Protocol(
         dataset=DATASET, models=("spdnet",), aggregations={"spdnet": ("projavg",)},
         model_args={"spdnet": TRAINING}, kinds=ALL_KINDS,
@@ -79,7 +80,7 @@ def study() -> Protocol:
         space={"nodp": {"lr": LR, "batch_size": SETTINGS["batches"], "horizon": BUDGET},
                "dp": {}},
         search="staged", stage_keys=[["lr", "batch_size"]],
-        sweep_seeds=SWEEP_SEEDS, final_seeds=FINAL_SEEDS, name=NAME)
+        sweep_seeds=SWEEP_SEEDS, final_seeds=FINAL_SEEDS, name=name)
 
 
 STAGES = {"sweep1": lambda: study().sweep(0), "final": lambda: study().final()}
