@@ -31,12 +31,12 @@ from typing import Any, Dict, List, Sequence, Set, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score
 from tqdm import tqdm
 
 from rfl.data.datasets import build_dataset, make_loader
 from rfl.data.registry import DATASET_CONFIGS as _DATASET_META
 from rfl.data.registry import get_sampling_rate
+from rfl.utils.metrics import macro_f1
 
 logger = logging.getLogger(__name__)
 
@@ -425,8 +425,7 @@ class FLClient:
             out[split] = {
                 'loss': total_loss / total if total else 0.0,
                 'acc': correct / total if total else 0.0,
-                'f1_macro': float(f1_score(labels_all, preds, average='macro',
-                                           zero_division=0)) if total else 0.0,
+                'f1_macro': macro_f1(labels_all, preds) if total else 0.0,
                 'n_samples': total,
                 'predictions': preds,
                 'labels': labels_all,

@@ -30,7 +30,6 @@ The module also builds the clients: `create_fl_clients` for MOABB data and
 from __future__ import annotations
 
 import copy
-import gc
 import logging
 import math
 import time
@@ -39,7 +38,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score
 
 from rfl.data.data_utils import filter_binary_task, load_moabb_dataset
 from rfl.federated.aggregation import (
@@ -49,6 +48,7 @@ from rfl.federated.aggregation import (
     polar_projection,
 )
 from rfl.federated.client import DATASET_SAMPLING_RATES, FLClient
+from rfl.utils.metrics import macro_f1
 from rfl.utils.schedules import compute_round_lr  # noqa: F401  (re-exported)
 
 logger = logging.getLogger(__name__)
@@ -460,14 +460,12 @@ class FLServer:
         diag = self._geometry_diagnostics(client_stiefel)
 
         del client_state_dicts, client_stiefel, client_sizes
-        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
         if aggregated is not None:
             self.update_global_model(aggregated)
         del aggregated
-        gc.collect()
 
         head_norm = self._head_norm()          # of the aggregated model
         if head_norm is not None:
@@ -615,13 +613,11 @@ class FLServer:
             return float(sum(l * n for l, n in zip(losses, sizes)) / total)
 
         global_val_acc = float(accuracy_score(val_labels, val_preds)) if val_labels else 0.0
-        global_val_f1 = float(f1_score(val_labels, val_preds, average='macro',
-                                       zero_division=0)) if val_labels else 0.0
+        global_val_f1 = macro_f1(val_labels, val_preds) if val_labels else 0.0
         global_val_loss = _pooled_loss(val_losses, val_sizes)
 
         global_test_acc = float(accuracy_score(test_labels, test_preds)) if test_labels else 0.0
-        global_test_f1 = float(f1_score(test_labels, test_preds, average='macro',
-                                        zero_division=0)) if test_labels else 0.0
+        global_test_f1 = macro_f1(test_labels, test_preds) if test_labels else 0.0
         global_test_loss = _pooled_loss(test_losses, test_sizes)
         return {
             'val_accs': val_accs, 'val_f1s': val_f1s, 'val_losses': val_losses,

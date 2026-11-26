@@ -391,3 +391,17 @@ def test_a_new_rule_runs_end_to_end(monkeypatch):
     assert _ortho_err(server.global_state_dict["bimap.weight"]) < 1e-4
     with pytest.raises(ValueError, match="EEGNet"):
         _cfg("eegnet", fl_aggregation="myrule")
+
+def test_macro_f1_matches_sklearn():
+    import numpy as np
+    from sklearn.metrics import f1_score
+
+    from rfl.utils.metrics import macro_f1
+    rng = np.random.default_rng(0)
+    for _ in range(500):
+        n, k = int(rng.integers(1, 40)), int(rng.integers(1, 5))
+        t = rng.integers(0, k, n)
+        p = np.where(rng.random(n) < 0.6, t, rng.integers(0, k + 1, n))
+        assert macro_f1(t.tolist(), p.tolist()) == f1_score(t, p, average="macro",
+                                                            zero_division=0)
+    assert macro_f1([], []) == 0.0
