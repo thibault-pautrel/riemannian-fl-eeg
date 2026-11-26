@@ -166,6 +166,15 @@ def test_accuracy_at_a_round_budget():
                                          "per_client_test_acc": [[.5]]}, [1])[0])
 
 
+def test_rounds_to_plateau_ignores_the_slow_tail_of_the_validation_loss():
+    from rfl.analysis.aggregation import rounds_to_plateau
+    acc = [.3, .5, .70, .72, .715, .72, .725, .72]
+    h = {"round": list(range(1, 9)), "global_val_loss": list(np.linspace(2, 1, 8)),
+         "per_client_test_acc": [[a] for a in acc]}
+    assert rounds_to_plateau(h, tol=0.01) == 4      # within 1 point of 0.72 from round 4
+    assert rounds_to_plateau(h, tol=0.03) == 3
+
+
 def _fake_fed_run(root, rule, part, e, pct, seed, lr=0.1, batch=32, diverged=False,
                   rng=None):
     d = root / f"fed_spdnet_{rule}_fedper_{part}_p{pct}_e{e}" / f"lr{lr}_B{batch}" / f"seed{seed}"

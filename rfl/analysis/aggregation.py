@@ -8,7 +8,10 @@ Three outputs, written with --out PREFIX:
    metric (client_mean_acc by default: every client weighs the same), the number of
    diverged runs (a RetAvg or PseAvg client outside the domain of the inverse map), the
    median selected round and the runs that hit the round budget. A diverged run has no
-   accuracy: it counts in `n_diverged`, not in the mean.
+   accuracy: it counts in `n_diverged`, not in the mean. `plateau_round` is the median
+   number of rounds after which the accuracy the run would report stays within 1 point
+   of its final value (`rounds_to_plateau`). The selected round itself can come much
+   later: the validation loss keeps falling slowly on the plateau.
    PREFIX.csv, PREFIX.tex (one row per cell, one column per rule), PREFIX.pdf.
 
 2. At a fixed communication budget (final runs, --budgets). The accuracy a run would
@@ -39,7 +42,6 @@ import pandas as pd
 
 from rfl.analysis.report import apply_filters
 from rfl.analysis.results import load_runs
-from rfl.utils.schedules import best_position
 
 RULES = ("projavg", "rlavg", "retavg", "pseavg")
 CELL = ["clients", "local_epochs", "participation"]
@@ -65,14 +67,47 @@ def _sort(out: pd.DataFrame, keys: list) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------- 1. convergence
+def _history(path: str) -> dict:
+    with open(os.path.join(path, "fl_results.json")) as f:
+        return json.load(f).get("round_history") or {}
+
+
+def _reported_accuracy(history: dict) -> tuple:
+    """(rounds, accuracy the run would report if stopped at each round): the client mean
+    test accuracy at the round of lowest validation loss so far."""
+    rounds = list(history.get("round") or [])
+    loss = list(history.get("global_val_loss") or [])
+    accs = [np.mean(a) if a else np.nan for a in history.get("per_client_test_acc") or []]
+    best, out = None, []
+    for i in range(min(len(rounds), len(loss), len(accs))):
+        if np.isfinite(loss[i]) and (best is None or loss[i] < loss[best]):
+            best = i
+        out.append(accs[best] if best is not None else np.nan)
+    return rounds[:len(out)], out
+
+
+def rounds_to_plateau(history: dict, tol: float = 0.01) -> float:
+    """First round from which the reported accuracy stays within `tol` of its final
+    value. NaN without history."""
+    rounds, acc = _reported_accuracy(history)
+    if not acc or not np.isfinite(acc[-1]):
+        return np.nan
+    first = len(acc) - 1
+    while first > 0 and np.isfinite(acc[first - 1]) and abs(acc[first - 1] - acc[-1]) <= tol:
+        first -= 1
+    return float(rounds[first])
+
+
 def summary(df: pd.DataFrame, metric: str) -> pd.DataFrame:
     """One row per cell and rule (module docstring, output 1)."""
     rows = []
     for key, g in _federated(df).groupby(CELL + ["rule"], dropna=False):
         ok = g[~g["diverged"]]
+        plateau = [rounds_to_plateau(_history(p)) for p in ok["path"]]
         rows.append(dict(zip(CELL + ["rule"], key), n=len(g),
                          n_diverged=int(g["diverged"].sum()),
                          mean=ok[metric].mean(), std=ok[metric].std(ddof=1),
+                         plateau_round=np.nanmedian(plateau) if plateau else np.nan,
                          median_round=ok["sel_round"].median(),
                          n_hit_budget=int(ok["hit_budget"].fillna(False).sum())))
     return _sort(pd.DataFrame(rows), [])
@@ -106,14 +141,11 @@ def latex(s: pd.DataFrame) -> str:
 def accuracy_at_budgets(history: dict, budgets: Sequence[int]) -> list:
     """Client mean test accuracy at the round of lowest validation loss among the first
     B rounds, for each B. NaN when no round of the first B has a finite loss."""
-    rounds = list(history.get("round") or [])
-    loss = list(history.get("global_val_loss") or [])
-    accs = [np.mean(a) if a else np.nan for a in history.get("per_client_test_acc") or []]
+    rounds, acc = _reported_accuracy(history)
     out = []
     for b in budgets:
         n = sum(1 for r in rounds if r <= b)
-        pos = best_position(loss[:n], True)
-        out.append(float(accs[pos]) if pos is not None and pos < len(accs) else np.nan)
+        out.append(float(acc[n - 1]) if n else np.nan)
     return out
 
 
@@ -123,8 +155,7 @@ def budget_table(df: pd.DataFrame, budgets: Sequence[int]) -> pd.DataFrame:
     for _, run in _federated(df).iterrows():
         accs = [np.nan] * len(budgets)
         if not run["diverged"]:
-            with open(os.path.join(run["path"], "fl_results.json")) as f:
-                accs = accuracy_at_budgets(json.load(f).get("round_history") or {}, budgets)
+            accs = accuracy_at_budgets(_history(run["path"]), budgets)
         rows += [dict(**{k: run[k] for k in CELL + ["rule", "seed"]}, budget=b, acc=a)
                  for b, a in zip(budgets, accs)]
     runs = pd.DataFrame(rows)
