@@ -40,7 +40,10 @@ MIN_PARTICIPATIONS = {"plateau": 2, "stop": 4, "budget": 12}
 RULES = ("projavg", "rlavg", "retavg", "pseavg")
 PARTICIPATION = (10, 50, 100)
 EPOCHS = (1, 10)
-EXTEND = {"lr": {"factor": 3, "min": 1e-3, "max": 1.0}}
+# The calibration extends its learning-rate grid at the edges. The study does not, to
+# keep the demonstration short (mi_agg does).
+CALIB_EXTEND = {"lr": {"factor": 3, "min": 1e-3, "max": 1.0}}
+EXTEND: dict = {}
 NAME = "agg_synth"
 
 

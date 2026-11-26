@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from typing import Sequence
 
@@ -59,18 +60,22 @@ LABELS = {"client_mean_acc": "mean client accuracy", "test_acc": "pooled test ac
 
 def _federated(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df["kind"] == "federated"].copy()
-    # A synthetic IID federation is a 'subject' partition of IID data: the arm names it.
-    iid = df["arm"].fillna("").str.contains("_iid_")
-    df.loc[iid, "clients"] = "iid"
+    # Synthetic data have no partition in their config: the arm names it (agg_synth).
+    arm = df["arm"].fillna("")
+    df.loc[arm.str.contains("_iid_"), "clients"] = "iid"
+    df.loc[df["clients"].isna() & arm.str.contains("_subj_"), "clients"] = "subject"
     df["local_epochs"] = df["local_epochs"].astype(int)
     df["rule"] = df["aggregation"]
     return df
 
 
 def _sort(out: pd.DataFrame, keys: list) -> pd.DataFrame:
+    """Subject clients first, then IID, then the rules in the order of RULES."""
     order = {r: i for i, r in enumerate(RULES)}
     out["_o"] = out["rule"].map(lambda r: order.get(r, len(order)))
-    return out.sort_values(CELL + ["_o"] + keys).drop(columns="_o").reset_index(drop=True)
+    out["_c"] = out["clients"].map(lambda c: 0 if c == "subject" else 1)
+    cols = ["_c"] + CELL[1:] + ["_o"] + keys
+    return out.sort_values(cols).drop(columns=["_o", "_c"]).reset_index(drop=True)
 
 
 # ---------------------------------------------------------------- 1. convergence
@@ -84,7 +89,10 @@ def _reported_accuracy(history: dict) -> tuple:
     test accuracy at the round of lowest validation loss so far."""
     rounds = list(history.get("round") or [])
     loss = list(history.get("global_val_loss") or [])
-    accs = [np.mean(a) if a else np.nan for a in history.get("per_client_test_acc") or []]
+    # avg_test_acc: mean over the clients of their test accuracy (client_mean_acc). The
+    # saved history has no per-client lists.
+    accs = list(history.get("avg_test_acc") or
+                [np.mean(a) if a else np.nan for a in history.get("per_client_test_acc") or []])
     best, out = None, []
     for i in range(min(len(rounds), len(loss), len(accs))):
         if np.isfinite(loss[i]) and (best is None or loss[i] < loss[best]):
@@ -135,7 +143,7 @@ def latex(s: pd.DataFrame) -> str:
                 cells.append("--")
                 continue
             m, sd, nd = by.loc[r, "mean"], by.loc[r, "std"], by.loc[r, "n_diverged"]
-            txt = f"{100 * m:.1f} ({100 * sd:.1f})"
+            txt = f"{100 * m:.1f} ({100 * sd:.1f})" if np.isfinite(sd) else f"{100 * m:.1f}"
             txt = rf"\textbf{{{txt}}}" if m == best else txt
             cells.append(txt + (rf"$^{{{nd}}}$" if nd else ""))
         clients, e, p = key
@@ -172,7 +180,8 @@ def paired_tests(df: pd.DataFrame, metric: str, baseline: str = "projavg") -> pd
     from rfl.analysis.stats import paired_pairwise
     d = _federated(df)
     d = d[~d["diverged"]]
-    return paired_pairwise(d, metric, "aggregation", CELL, baseline=baseline)
+    pw = paired_pairwise(d, metric, "aggregation", CELL, baseline=baseline)
+    return _sort(pw.assign(rule=pw["level"]), []).drop(columns="rule")
 
 
 def latex_tests(pw: pd.DataFrame) -> str:
@@ -257,8 +266,9 @@ def _panels(data: pd.DataFrame, x: str, y: str, path: str, xlabel: str, ylabel: 
         sel = [[(lambda d, c=c, e=e: d[(d["clients"] == c) & (d["local_epochs"] == e)],
                  f"{c} clients, E = {e}") for e in epochs] for c in parts]
     nr, nc = len(sel), len(sel[0])
-    fig, axes = plt.subplots(nr, nc, squeeze=False, sharey=True,
-                             figsize=(3.2 * nc, 2.5 * nr))
+    w, h = (2.0, 1.55) if by_participation else (3.2, 2.5)     # inches per panel
+    plt.rcParams.update({"font.size": 7 if by_participation else 9})
+    fig, axes = plt.subplots(nr, nc, squeeze=False, sharey=True, figsize=(w * nc, h * nr))
     rules = [r for r in RULES if r in set(data["rule"])]
     for i, row in enumerate(sel):
         for j, (pick, title) in enumerate(row):
@@ -277,7 +287,7 @@ def _panels(data: pd.DataFrame, x: str, y: str, path: str, xlabel: str, ylabel: 
                 ax.set_xscale("log")
             elif x == "participation":
                 ax.set_xticks(sorted({round(100 * v) for v in data["participation"]}))
-            ax.set_title(title, fontsize=8)
+            ax.set_title(title, fontsize=7 if by_participation else 8)
             ax.grid(alpha=0.3, linewidth=0.5)
             if i == nr - 1:
                 ax.set_xlabel(xlabel)
@@ -285,7 +295,7 @@ def _panels(data: pd.DataFrame, x: str, y: str, path: str, xlabel: str, ylabel: 
                 ax.set_ylabel(ylabel)
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=max(1, len(labels)), frameon=False)
-    fig.tight_layout(rect=(0, 0.6 / (2.5 * nr), 1, 1))
+    fig.tight_layout(rect=(0, 0.5 / (h * nr), 1, 1))
     fig.savefig(path)
     plt.close(fig)
 
@@ -312,6 +322,8 @@ partition (one subject per client or IID clients), participation $p$ per round a
 local epochs $E$. Learning rate and batch size are tuned per arm on the validation
 accuracy, then %(seeds)s final seeds are run. Each run reports the model of its round of
 lowest pooled validation loss. Metric: %(metric)s.
+
+Calibrated model (central calibration, the same in every arm): %(model)s.
 
 \section{Accuracy at convergence}
 \begin{table}[h]\centering\small
@@ -368,8 +380,26 @@ the learning rate.}
 """
 
 
+def model_line(runs: pd.DataFrame) -> str:
+    """Hidden dimensions, ReEig floors and BN momentum of the runs (one line of LaTeX)."""
+    cfgs = []
+    for path in _federated(runs)["path"]:
+        with open(os.path.join(path, "fl_results.json")) as f:
+            cfgs.append(json.load(f).get("config") or {})
+    keys = ("spdnet_hidden_dims", "spdnet_epsilons", "spdnet_reeig_percentile",
+            "spdnet_reeig_percentile_2", "spdnet_bn_momentum")
+    seen = {tuple(str(c.get(k)) for k in keys) for c in cfgs}
+    if len(seen) != 1:
+        return f"{len(seen)} different settings (check the runs)"
+    dims, eps, q1, q2, mom = next(iter(seen))
+    q = "" if q1 == "None" else (f" (percentiles {q1}" + ("" if q2 == "None" else f", {q2}")
+                                 + ")")
+    return (f"hidden dimensions {dims}, ReEig floors {eps}{q}, "
+            f"batch-norm momentum {mom}").replace("_", r"\_")
+
+
 def write_report(prefix: str, s: pd.DataFrame, pw: pd.DataFrame, metric: str, title: str,
-                 seeds: int, with_lr: bool) -> str:
+                 seeds: int, with_lr: bool, model: str = "") -> str:
     """PREFIX_report.tex, compiled with pdflatex when available. Returns the .tex path."""
     import shutil
     import subprocess
@@ -379,8 +409,8 @@ def write_report(prefix: str, s: pd.DataFrame, pw: pd.DataFrame, metric: str, ti
     with open(f"{prefix}_tests.tex", "w") as f:
         f.write(latex_tests(pw))
     cap = LABELS.get(metric, metric).capitalize()
-    tex = REPORT % {"title": title.replace("_", r"\_"), "base": base, "seeds": seeds,
-                    "metric": LABELS.get(metric, metric), "metric_cap": cap,
+    tex = REPORT % {"title": re.sub(r"(?<!\\)_", r"\\_", title), "base": base, "seeds": seeds,
+                    "metric": LABELS.get(metric, metric), "metric_cap": cap, "model": model,
                     "lr": REPORT_LR % {"base": base} if with_lr else ""}
     path = f"{prefix}_report.tex"
     with open(path, "w") as f:
@@ -429,22 +459,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         figure(s, f"{a.out}.pdf", a.metric)
         b.to_csv(f"{a.out}_budget.csv", index=False)
         _panels(b, "budget", "mean", f"{a.out}_budget.pdf", "round budget",
-                LABELS["client_mean_acc"] + " (%)", by_participation=True, logx=True)
+                "accuracy (%)", by_participation=True, logx=True)
         written = [f"{a.out}{x}" for x in (".csv", ".tex", ".pdf", "_budget.csv",
                                            "_budget.pdf")]
         if lr is not None:
             lr.to_csv(f"{a.out}_lr.csv", index=False)
             _panels(lr, "lr", "best_val_acc", f"{a.out}_lr_acc.pdf", "learning rate",
-                    "best mean validation accuracy (%)", by_participation=True, logx=True)
+                    "val. accuracy (%)", by_participation=True, logx=True)
             _panels(lr, "lr", "diverged_share", f"{a.out}_lr_div.pdf", "learning rate",
-                    "diverged runs (%)", by_participation=True, logx=True)
+                    "diverged (%)", by_participation=True, logx=True)
             written += [f"{a.out}{x}" for x in ("_lr.csv", "_lr_acc.pdf", "_lr_div.pdf")]
         if a.report:
             pw = paired_tests(runs, a.metric)
             pw.to_csv(f"{a.out}_tests.csv", index=False)
             title = a.title or ", ".join(sorted(map(str, runs["dataset"].dropna().unique())))
             seeds = int(s["n"].max()) if len(s) else 0
-            tex = write_report(a.out, s, pw, a.metric, title, seeds, lr is not None)
+            tex = write_report(a.out, s, pw, a.metric, title, seeds, lr is not None,
+                               model_line(runs))
             pdf = tex[:-4] + ".pdf"
             written += [tex] + ([pdf] if os.path.exists(pdf) else [])
         print("written: " + ", ".join(written))
