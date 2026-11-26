@@ -2,6 +2,7 @@
 import importlib
 import json
 
+import numpy as np
 import pytest
 
 from rfl.experiments import grid as G
@@ -156,33 +157,63 @@ def test_a_subset_leaves_the_other_arms_alone(plans):
         main.variants(9)
 
 
-def test_summary_table_and_figure(tmp_path):
-    from rfl.analysis.aggregation import latex, main, summary
+def test_accuracy_at_a_round_budget():
+    from rfl.analysis.aggregation import accuracy_at_budgets
+    h = {"round": [1, 2, 3, 4, 5], "global_val_loss": [3.0, 2.0, float("nan"), 1.0, 1.5],
+         "per_client_test_acc": [[.1, .3], [.4, .4], [.9, .9], [.6, .8], [.0, .0]]}
+    assert accuracy_at_budgets(h, [1, 2, 3, 4, 100]) == pytest.approx([.2, .4, .4, .7, .7])
+    assert np.isnan(accuracy_at_budgets({"round": [1], "global_val_loss": [float("nan")],
+                                         "per_client_test_acc": [[.5]]}, [1])[0])
+
+
+def _fake_fed_run(root, rule, part, e, pct, seed, lr=0.1, batch=32, diverged=False,
+                  rng=None):
+    d = root / f"fed_spdnet_{rule}_fedper_{part}_p{pct}_e{e}" / f"lr{lr}_B{batch}" / f"seed{seed}"
+    d.mkdir(parents=True)
+    cfg = {"dataset": "Cho2017", "model_type": "spdnet", "fl_aggregation": rule,
+           "fl_client_partition": part, "fl_client_fraction": pct / 100,
+           "fl_local_epochs": e, "fl_local_fc": True, "seed": seed,
+           "learning_rate": lr, "batch_size": batch}
+    acc = [[0.6 + 0.1 * rng.random() for _ in range(4)] for _ in range(50)]
+    loss = list(np.linspace(2, 1, 50))
+    r = {"config": cfg, "diverged": diverged,
+         "final_metrics": {"per_client_test_acc": acc[-1], "global_val_acc": 0.6 + lr},
+         "selection": {"round": 50, "hit_budget": False},
+         "round_history": {"round": list(range(1, 51)), "global_val_loss": loss,
+                           "per_client_test_acc": acc}}
+    (d / "fl_results.json").write_text(json.dumps(r))
+
+
+def test_summary_table_and_figures(tmp_path):
+    from rfl.analysis.aggregation import budget_table, latex, lr_table, main, summary
     from rfl.analysis.results import load_runs
-    rng = __import__("numpy").random.default_rng(0)
+    rng = np.random.default_rng(0)
+    final, sweep = tmp_path / "final", tmp_path / "sweep1"
     for rule in ("projavg", "rlavg", "retavg", "pseavg"):
         for part in ("subject", "iid"):
             for e in (1, 10):
                 for pct in (25, 100):
                     for seed in (101, 102, 103):
-                        d = tmp_path / f"fed_spdnet_{rule}_fedper_{part}_p{pct}_e{e}" / "hp" / f"seed{seed}"
-                        d.mkdir(parents=True)
-                        cfg = {"dataset": "Cho2017", "model_type": "spdnet",
-                               "fl_aggregation": rule, "fl_client_partition": part,
-                               "fl_client_fraction": pct / 100, "fl_local_epochs": e,
-                               "fl_local_fc": True, "seed": seed}
-                        diverged = rule == "retavg" and e == 10 and seed == 101
-                        acc = [0.6 + 0.1 * rng.random() for _ in range(4)]
-                        r = {"config": cfg, "diverged": diverged,
-                             "final_metrics": {"per_client_test_acc": acc,
-                                               "global_val_acc": 0.6},
-                             "selection": {"round": 40 * e, "hit_budget": False},
-                             "round_history": {"round": list(range(50))}}
-                        (d / "fl_results.json").write_text(json.dumps(r))
-    s = summary(load_runs(str(tmp_path)), "client_mean_acc")
+                        _fake_fed_run(final, rule, part, e, pct, seed, rng=rng,
+                                      diverged=rule == "retavg" and e == 10 and seed == 101)
+                    for lr in (0.01, 0.1, 0.3):
+                        for batch in (16, 32):
+                            for seed in (1, 2):
+                                _fake_fed_run(sweep, rule, part, e, pct, seed, lr, batch,
+                                              diverged=rule == "pseavg" and lr == 0.3,
+                                              rng=rng)
+    runs = load_runs(str(final))
+    s = summary(runs, "client_mean_acc")
     assert len(s) == 4 * 2 * 2 * 2 and set(s["n"]) == {3}
     row = s[(s["rule"] == "retavg") & (s["local_epochs"] == 10)]
     assert set(row["n_diverged"]) == {1}
     assert "$^{1}$" in latex(s) and r"\textbf" in latex(s)
-    assert main([str(tmp_path), "--out", str(tmp_path / "agg")]) == 0
-    assert (tmp_path / "agg.pdf").stat().st_size > 0
+    b = budget_table(runs, [10, 50])
+    assert len(b) == 2 * len(s) and set(b[b["rule"] == "projavg"]["n"]) == {3}
+    lr = lr_table(load_runs(str(sweep)))
+    pse = lr[(lr["rule"] == "pseavg") & (lr["lr"] == 0.3)]
+    assert set(pse["diverged_share"]) == {1.0} and pse["best_val_acc"].isna().all()
+    assert set(lr[lr["rule"] == "projavg"]["best_val_acc"].round(2)) == {0.61, 0.7, 0.9}
+    assert main([str(final), "--sweep", str(sweep), "--out", str(tmp_path / "agg")]) == 0
+    for suffix in (".pdf", "_budget.pdf", "_lr_acc.pdf", "_lr_div.pdf", "_lr.csv"):
+        assert (tmp_path / f"agg{suffix}").stat().st_size > 0
