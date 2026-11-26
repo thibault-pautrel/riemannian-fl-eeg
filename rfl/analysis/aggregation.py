@@ -24,8 +24,12 @@ Three outputs, written with --out PREFIX:
    and the share of diverged runs over every batch size. PREFIX_lr.csv,
    PREFIX_lr_acc.pdf and PREFIX_lr_div.pdf.
 
+With --report, PREFIX_report.tex gathers the tables, the paired tests against ProjAvg
+(Wilcoxon, Holm correction within each cell, rfl/analysis/stats.py) and the figures,
+and is compiled to PREFIX_report.pdf when pdflatex is available.
+
     R=$RFL_RESULTS/mi_Cho2017_agg
-    python -m rfl.analysis.aggregation $R/final --sweep $R/sweep1 --out agg_Cho2017
+    python -m rfl.analysis.aggregation $R/final --sweep $R/sweep1 --out agg_Cho2017 --report
     python -m rfl.analysis.stats $R/final --metric client_mean_acc \\
         --factor aggregation --baseline projavg --by clients local_epochs participation
 """
@@ -55,6 +59,9 @@ LABELS = {"client_mean_acc": "mean client accuracy", "test_acc": "pooled test ac
 
 def _federated(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df["kind"] == "federated"].copy()
+    # A synthetic IID federation is a 'subject' partition of IID data: the arm names it.
+    iid = df["arm"].fillna("").str.contains("_iid_")
+    df.loc[iid, "clients"] = "iid"
     df["local_epochs"] = df["local_epochs"].astype(int)
     df["rule"] = df["aggregation"]
     return df
@@ -133,6 +140,57 @@ def latex(s: pd.DataFrame) -> str:
             cells.append(txt + (rf"$^{{{nd}}}$" if nd else ""))
         clients, e, p = key
         lines.append(f"{clients} & {e} & {100 * p:g} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    return "\n".join(lines) + "\n"
+
+
+def latex_rounds(s: pd.DataFrame) -> str:
+    """One row per cell, one column per rule: median rounds to the plateau, then in
+    parentheses the median selected round, and as a superscript the runs that hit the
+    round budget."""
+    rules = [r for r in RULES if r in set(s["rule"])]
+    lines = [r"\begin{tabular}{ll r" + "c" * len(rules) + "}", r"\toprule",
+             "Clients & $E$ & $p$ (\\%) & " + " & ".join(rules) + r" \\", r"\midrule"]
+    for (clients, e, p), g in s.groupby(CELL, sort=False):
+        by = g.set_index("rule")
+        cells = []
+        for r in rules:
+            if r not in by.index or np.isnan(by.loc[r, "plateau_round"]):
+                cells.append("--")
+                continue
+            txt = f"{by.loc[r, 'plateau_round']:.0f} ({by.loc[r, 'median_round']:.0f})"
+            hb = int(by.loc[r, "n_hit_budget"])
+            cells.append(txt + (rf"$^{{{hb}}}$" if hb else ""))
+        lines.append(f"{clients} & {e} & {100 * p:g} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    return "\n".join(lines) + "\n"
+
+
+def paired_tests(df: pd.DataFrame, metric: str, baseline: str = "projavg") -> pd.DataFrame:
+    """Every rule against `baseline` within each cell, paired on the seeds
+    (rfl/analysis/stats.py: Wilcoxon signed-rank, Holm correction within the cell)."""
+    from rfl.analysis.stats import paired_pairwise
+    d = _federated(df)
+    d = d[~d["diverged"]]
+    return paired_pairwise(d, metric, "aggregation", CELL, baseline=baseline)
+
+
+def latex_tests(pw: pd.DataFrame) -> str:
+    """One row per cell and rule: mean paired difference with the baseline (points),
+    share of seeds where the rule wins, Holm-adjusted p-value (bold below 0.05)."""
+    lines = [r"\begin{tabular}{ll r l r r r r}", r"\toprule",
+             r"Clients & $E$ & $p$ (\%) & Rule & pairs & $\Delta$ (pt) & wins & $p_{\mathrm{Holm}}$ \\",
+             r"\midrule"]
+    for _, r in pw.iterrows():
+        if not np.isfinite(r.get("p_value", np.nan)):
+            diff, wins, ph = "--", "--", "--"
+        else:
+            diff = f"{100 * r['mean_diff']:+.1f}"
+            wins = f"{100 * r['win_rate']:.0f}\\%"
+            ph = f"{r['p_holm']:.3f}"
+            ph = rf"\textbf{{{ph}}}" if r["p_holm"] < 0.05 else ph
+        lines.append(f"{r['clients']} & {r['local_epochs']} & {100 * r['participation']:g} & "
+                     f"{r['level']} & {r['n_pairs']} & {diff} & {wins} & {ph} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     return "\n".join(lines) + "\n"
 
@@ -238,6 +296,103 @@ def figure(s: pd.DataFrame, path: str, metric: str) -> None:
             LABELS.get(metric, metric) + " (%)", by_participation=False, err="std")
 
 
+# ---------------------------------------------------------------- report
+REPORT = r"""\documentclass[11pt]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{booktabs, graphicx, caption}
+\captionsetup{font=small}
+\title{Aggregation study: %(title)s}
+\date{\today}
+\begin{document}
+\maketitle
+
+Two-block SPDNet, personal head (FedPer) and local batch norms (FedBN): the server
+averages the BiMap weights $W_1$ and $W_2$ only. Factors: aggregation rule, client
+partition (one subject per client or IID clients), participation $p$ per round and
+local epochs $E$. Learning rate and batch size are tuned per arm on the validation
+accuracy, then %(seeds)s final seeds are run. Each run reports the model of its round of
+lowest pooled validation loss. Metric: %(metric)s.
+
+\section{Accuracy at convergence}
+\begin{table}[h]\centering\small
+\caption{%(metric_cap)s (\%%), mean (standard deviation) over the final seeds. Best rule
+of each row in bold. Superscript: diverged runs, left out of the mean.}
+\input{%(base)s.tex}
+\end{table}
+
+\begin{figure}[h]\centering
+\includegraphics[width=\linewidth]{%(base)s.pdf}
+\caption{%(metric_cap)s against the participation, one panel per partition and $E$
+(mean and standard deviation over the final seeds).}
+\end{figure}
+
+\begin{table}[h]\centering\small
+\caption{Rounds to the plateau: first round after which the reported accuracy stays within
+one point of its final value (median over the seeds). In parentheses: median selected round
+(lowest validation loss). Superscript: runs that hit the round budget.}
+\input{%(base)s_rounds.tex}
+\end{table}
+
+\clearpage
+\section{Paired comparisons with ProjAvg}
+\begin{table}[h]\centering\small
+\caption{Each rule against ProjAvg within each cell, paired on the seeds (same splits and
+same sampled clients). $\Delta$: mean difference in points. Wins: share of seeds where the
+rule is better. Wilcoxon signed-rank test, Holm correction within the cell, at least 6
+pairs (bold: $p < 0.05$).}
+\input{%(base)s_tests.tex}
+\end{table}
+
+\clearpage
+\section{Accuracy at a fixed communication budget}
+\begin{figure}[h]\centering
+\includegraphics[width=\linewidth]{%(base)s_budget.pdf}
+\caption{Accuracy each run would report if stopped after $B$ rounds (model of lowest
+validation loss among the first $B$ rounds), mean over the final seeds.}
+\end{figure}
+%(lr)s
+\end{document}
+"""
+REPORT_LR = r"""
+\clearpage
+\section{Sensitivity to the learning rate}
+\begin{figure}[h]\centering
+\includegraphics[width=\linewidth]{%(base)s_lr_acc.pdf}
+\caption{Tuning runs: mean validation accuracy over the seeds, best batch size, against
+the learning rate.}
+\end{figure}
+\begin{figure}[h]\centering
+\includegraphics[width=\linewidth]{%(base)s_lr_div.pdf}
+\caption{Tuning runs: share of diverged runs against the learning rate (every batch size).}
+\end{figure}
+"""
+
+
+def write_report(prefix: str, s: pd.DataFrame, pw: pd.DataFrame, metric: str, title: str,
+                 seeds: int, with_lr: bool) -> str:
+    """PREFIX_report.tex, compiled with pdflatex when available. Returns the .tex path."""
+    import shutil
+    import subprocess
+    out_dir, base = os.path.dirname(os.path.abspath(prefix)), os.path.basename(prefix)
+    with open(f"{prefix}_rounds.tex", "w") as f:
+        f.write(latex_rounds(s))
+    with open(f"{prefix}_tests.tex", "w") as f:
+        f.write(latex_tests(pw))
+    cap = LABELS.get(metric, metric).capitalize()
+    tex = REPORT % {"title": title.replace("_", r"\_"), "base": base, "seeds": seeds,
+                    "metric": LABELS.get(metric, metric), "metric_cap": cap,
+                    "lr": REPORT_LR % {"base": base} if with_lr else ""}
+    path = f"{prefix}_report.tex"
+    with open(path, "w") as f:
+        f.write(tex)
+    if shutil.which("pdflatex"):
+        for _ in range(2):
+            subprocess.run(["pdflatex", "-interaction=nonstopmode", "-halt-on-error",
+                            os.path.basename(path)], cwd=out_dir,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return path
+
+
 # ---------------------------------------------------------------- CLI
 def main(argv: Sequence[str] | None = None) -> int:
     p = argparse.ArgumentParser(allow_abbrev=False, description=__doc__,
@@ -250,6 +405,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="Round budgets of output 2.")
     p.add_argument("--where", nargs="+", default=[], metavar="COL=VALUE")
     p.add_argument("--out", default=None, help="Prefix of the output files.")
+    p.add_argument("--report", action="store_true",
+                   help="Also write PREFIX_report.tex and compile it (needs --out).")
+    p.add_argument("--title", default=None, help="Title of the report (default: dataset).")
     a = p.parse_args(argv)
     fmt = {"display.width": 160, "display.max_rows": None}
     runs = apply_filters(load_runs(*a.roots), a.where)
@@ -281,6 +439,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             _panels(lr, "lr", "diverged_share", f"{a.out}_lr_div.pdf", "learning rate",
                     "diverged runs (%)", by_participation=True, logx=True)
             written += [f"{a.out}{x}" for x in ("_lr.csv", "_lr_acc.pdf", "_lr_div.pdf")]
+        if a.report:
+            pw = paired_tests(runs, a.metric)
+            pw.to_csv(f"{a.out}_tests.csv", index=False)
+            title = a.title or ", ".join(sorted(map(str, runs["dataset"].dropna().unique())))
+            seeds = int(s["n"].max()) if len(s) else 0
+            tex = write_report(a.out, s, pw, a.metric, title, seeds, lr is not None)
+            pdf = tex[:-4] + ".pdf"
+            written += [tex] + ([pdf] if os.path.exists(pdf) else [])
         print("written: " + ", ".join(written))
     return 0
 

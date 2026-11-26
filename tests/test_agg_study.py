@@ -223,6 +223,11 @@ def test_summary_table_and_figures(tmp_path):
     pse = lr[(lr["rule"] == "pseavg") & (lr["lr"] == 0.3)]
     assert set(pse["diverged_share"]) == {1.0} and pse["best_val_acc"].isna().all()
     assert set(lr[lr["rule"] == "projavg"]["best_val_acc"].round(2)) == {0.61, 0.7, 0.9}
-    assert main([str(final), "--sweep", str(sweep), "--out", str(tmp_path / "agg")]) == 0
-    for suffix in (".pdf", "_budget.pdf", "_lr_acc.pdf", "_lr_div.pdf", "_lr.csv"):
+    assert main([str(final), "--sweep", str(sweep), "--out", str(tmp_path / "agg"),
+                 "--report"]) == 0
+    tex = (tmp_path / "agg_report.tex").read_text()
+    assert r"\input{agg_tests.tex}" in tex and r"agg_lr_div.pdf" in tex
+    assert "fewer than 6 pairs" in (tmp_path / "agg_tests.csv").read_text()
+    for suffix in (".pdf", "_budget.pdf", "_lr_acc.pdf", "_lr_div.pdf", "_lr.csv",
+                   "_rounds.tex", "_tests.tex"):
         assert (tmp_path / f"agg{suffix}").stat().st_size > 0
